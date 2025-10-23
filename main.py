@@ -1,0 +1,322 @@
+import sys
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                               QHBoxLayout, QPushButton, QLabel, QTextEdit,
+                               QGroupBox, QMessageBox)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+import logging
+from logger_config import setup_logger
+from db_manager import DatabaseManager
+from gui_windows import ConnectionDialog, AddDataDialog, ViewDataDialog
+
+
+class BankSystemApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.logger = setup_logger()
+        self.db_manager = None
+        self.is_connected = False
+
+        self.setWindowTitle("Банковская система - Работа с валютными операциями")
+        self.setGeometry(100, 100, 900, 700)
+
+        self.setup_ui()
+        self.show_connection_dialog()
+
+    def setup_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
+
+        title_label = QLabel("Банковская система\nУправление валютными операциями")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_font = QFont("Arial", 16, QFont.Weight.Bold)
+        title_label.setFont(title_font)
+        main_layout.addWidget(title_label)
+
+        status_group = QGroupBox("Статус подключения")
+        status_layout = QVBoxLayout()
+        self.status_label = QLabel("⚠ Не подключено к базе данных")
+        self.status_label.setStyleSheet("color: red; font-weight: bold;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_layout.addWidget(self.status_label)
+        status_group.setLayout(status_layout)
+        main_layout.addWidget(status_group)
+
+        buttons_layout = QVBoxLayout()
+        buttons_layout.setSpacing(10)
+
+        button_style = """
+            QPushButton {
+                background-color: #2E86AB;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1B5B7E;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """
+
+        self.btn_create_schema = QPushButton("Создать схему и таблицы")
+        self.btn_create_schema.setMinimumHeight(40)
+        self.btn_create_schema.setEnabled(False)
+        self.btn_create_schema.setStyleSheet(button_style)
+        self.btn_create_schema.clicked.connect(self.create_schema)
+        buttons_layout.addWidget(self.btn_create_schema)
+
+        self.btn_drop_schema = QPushButton("Удалить схему bank_system")
+        self.btn_drop_schema.setMinimumHeight(40)
+        self.btn_drop_schema.setEnabled(False)
+        self.btn_drop_schema.setStyleSheet("""
+            QPushButton {
+                background-color: #E74C3C;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #C0392B;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """)
+        self.btn_drop_schema.clicked.connect(self.drop_schema)
+        buttons_layout.addWidget(self.btn_drop_schema)
+
+        self.btn_insert_data = QPushButton("Внести данные")
+        self.btn_insert_data.setMinimumHeight(40)
+        self.btn_insert_data.setEnabled(False)
+        self.btn_insert_data.setStyleSheet(button_style)
+        self.btn_insert_data.clicked.connect(self.show_insert_dialog)
+        buttons_layout.addWidget(self.btn_insert_data)
+
+        self.btn_view_data = QPushButton("Показать данные")
+        self.btn_view_data.setMinimumHeight(40)
+        self.btn_view_data.setEnabled(False)
+        self.btn_view_data.setStyleSheet(button_style)
+        self.btn_view_data.clicked.connect(self.show_view_dialog)
+        buttons_layout.addWidget(self.btn_view_data)
+
+        self.btn_reconnect = QPushButton("Переподключиться к БД")
+        self.btn_reconnect.setMinimumHeight(40)
+        self.btn_reconnect.setStyleSheet("""
+            QPushButton {
+                background-color: #27AE60;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #219653;
+            }
+        """)
+        self.btn_reconnect.clicked.connect(self.show_connection_dialog)
+        buttons_layout.addWidget(self.btn_reconnect)
+
+        main_layout.addLayout(buttons_layout)
+
+        log_group = QGroupBox("Последние действия")
+        log_layout = QVBoxLayout()
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMaximumHeight(200)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #F8F9FA;
+                border: 1px solid #DDD;
+                border-radius: 3px;
+                padding: 5px;
+                font-family: Consolas, monospace;
+            }
+        """)
+        log_layout.addWidget(self.log_text)
+        log_group.setLayout(log_layout)
+        main_layout.addWidget(log_group)
+
+        group_style = """
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #CCCCCC;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """
+        status_group.setStyleSheet(group_style)
+        log_group.setStyleSheet(group_style)
+
+    def show_connection_dialog(self):
+        dialog = ConnectionDialog(self)
+        if dialog.exec():
+            params = dialog.get_connection_params()
+            if params:
+                self.connect_to_database(params)
+
+    def connect_to_database(self, params):
+        try:
+            if self.db_manager:
+                self.db_manager.disconnect()
+
+            self.db_manager = DatabaseManager(
+                host=params['host'],
+                port=int(params['port']),
+                database=params['database'],
+                user=params['user'],
+                password=params['password']
+            )
+
+            self.db_manager.connect()
+            self.is_connected = True
+
+            self.status_label.setText(f"✓ Подключено к {params['database']} на {params['host']}")
+            self.status_label.setStyleSheet("color: green; font-weight: bold;")
+
+            self.btn_create_schema.setEnabled(True)
+            self.btn_insert_data.setEnabled(True)
+            self.btn_view_data.setEnabled(True)
+            self.btn_drop_schema.setEnabled(True)
+
+            self.add_log("Успешное подключение к базе данных")
+            QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
+
+        except Exception as e:
+            self.logger.error(f"Connection failed: {e}")
+            QMessageBox.critical(self, "Ошибка подключения", str(e))
+            self.add_log(f"Ошибка подключения: {e}")
+
+    def create_schema(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        try:
+            with open('database_schema.sql', 'r', encoding='utf-8') as f:
+                sql_script = f.read()
+
+            self.db_manager.execute_script(sql_script)
+
+            QMessageBox.information(
+                self,
+                "Успех",
+                "Схема базы данных успешно создана!\n\n"
+                "Созданы:\n"
+                "- Схема bank_system\n"
+                "- Типы ENUM (transaction_type, account_status)\n"
+                "- 5 таблиц с ограничениями\n"
+                "- Индексы для оптимизации\n"
+                "- Тестовые данные (валюты, курсы, клиенты, счета, транзакции)"
+            )
+            self.add_log("Схема БД создана с тестовыми данными")
+
+        except FileNotFoundError:
+            QMessageBox.critical(self, "Ошибка", "Файл database_schema.sql не найден")
+            self.add_log("Ошибка: файл схемы не найден")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось создать схему:\n{str(e)}")
+            self.add_log(f"Ошибка создания схемы: {e}")
+
+    def drop_schema(self):
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение удаления схемы",
+            "Вы уверены, что хотите удалить схему bank_system?\n\n"
+            "Это действие:\n"
+            "• Удалит ВСЕ таблицы и данные в схеме bank_system\n"
+            "• Удалит пользовательские типы (ENUM)\n"
+            "• Не может быть отменено!\n\n"
+            "Продолжить?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                if self.db_manager.drop_schema():
+                    QMessageBox.information(
+                        self,
+                        "Успех",
+                        "Схема bank_system успешно удалена.\n\n"
+                        "Для создания новой схемы нажмите 'Создать схему и таблицы'."
+                    )
+                    self.add_log("Схема bank_system удалена")
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Предупреждение",
+                        "Не удалось удалить схему bank_system"
+                    )
+                    self.add_log("Предупреждение: не удалось удалить схему")
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Ошибка",
+                    f"Не удалось удалить схему:\n{str(e)}"
+                )
+                self.add_log(f"Ошибка удаления схемы: {e}")
+
+    def show_insert_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = AddDataDialog(self, self.db_manager, self.add_log)
+        dialog.exec()
+
+    def show_view_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = ViewDataDialog(self, self.db_manager)
+        dialog.exec()
+
+    def add_log(self, message: str):
+        self.log_text.append(f"• {message}")
+
+    def closeEvent(self, event):
+        if self.db_manager:
+            self.db_manager.disconnect()
+        self.logger.info("Application closed")
+        event.accept()
+
+
+def main():
+    app = QApplication(sys.argv)
+
+    app.setStyleSheet("""
+        QMainWindow {
+            background-color: #F5F5F5;
+        }
+        QLabel {
+            color: #333333;
+        }
+    """)
+
+    window = BankSystemApp()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

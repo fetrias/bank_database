@@ -25,6 +25,9 @@ class ConnectionDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
+        self.setup_ui()
+        self.initialize_database_connection()
+
         self.setStyleSheet("""
             QPushButton {
                 background-color: #2E86AB;

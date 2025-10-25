@@ -399,3 +399,207 @@ class DatabaseManager:
             self.connection.rollback()
             self.logger.error(f"Failed to drop bank_system schema: {e}")
             raise
+    
+    def get_tables_list(self) -> List[str]:
+        query = """
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'bank_system' 
+            ORDER BY table_name
+        """
+        results = self.execute_query(query)
+        return [row[0] for row in results]
+    
+    def get_table_columns(self, table_name: str) -> List[Dict[str, Any]]:
+        query = """
+            SELECT column_name, data_type, character_maximum_length, 
+                   is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = 'bank_system' AND table_name = %s
+            ORDER BY ordinal_position
+        """
+        results = self.execute_query(query, (table_name,))
+        columns = []
+        for row in results:
+            columns.append({
+                'name': row[0],
+                'type': row[1],
+                'max_length': row[2],
+                'nullable': row[3],
+                'default': row[4]
+            })
+        return columns
+    
+    def alter_table_add_column(self, table_name: str, column_name: str, 
+                               data_type: str, constraints: str = "") -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} ADD COLUMN {column_name} {data_type}"
+        if constraints:
+            query += f" {constraints}"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_drop_column(self, table_name: str, column_name: str) -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} DROP COLUMN {column_name}"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_rename_column(self, table_name: str, old_name: str, new_name: str) -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} RENAME COLUMN {old_name} TO {new_name}"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_rename_table(self, old_name: str, new_name: str) -> bool:
+        query = f"ALTER TABLE bank_system.{old_name} RENAME TO {new_name}"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_change_type(self, table_name: str, column_name: str, new_type: str) -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} ALTER COLUMN {column_name} TYPE {new_type}"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_set_not_null(self, table_name: str, column_name: str) -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} ALTER COLUMN {column_name} SET NOT NULL"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_drop_not_null(self, table_name: str, column_name: str) -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} ALTER COLUMN {column_name} DROP NOT NULL"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_add_constraint(self, table_name: str, constraint_name: str, 
+                                   constraint_def: str) -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} ADD CONSTRAINT {constraint_name} {constraint_def}"
+        self.execute_query(query)
+        return True
+    
+    def alter_table_drop_constraint(self, table_name: str, constraint_name: str) -> bool:
+        query = f"ALTER TABLE bank_system.{table_name} DROP CONSTRAINT {constraint_name}"
+        self.execute_query(query)
+        return True
+    
+    def execute_advanced_select(self, table_name: str, columns: List[str] = None,
+                               where_clause: str = "", order_by: str = "",
+                               group_by: str = "", having: str = "") -> Tuple[List[Tuple], List[str]]:
+        select_cols = ", ".join(columns) if columns else "*"
+        query = f"SELECT {select_cols} FROM bank_system.{table_name}"
+        
+        if where_clause:
+            query += f" WHERE {where_clause}"
+        
+        if group_by:
+            query += f" GROUP BY {group_by}"
+        
+        if having:
+            query += f" HAVING {having}"
+        
+        if order_by:
+            query += f" ORDER BY {order_by}"
+        
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(query)
+            results = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            return results, column_names
+        finally:
+            cursor.close()
+    
+    def execute_text_search(self, table_name: str, column_name: str, 
+                           search_pattern: str, search_type: str = "LIKE") -> Tuple[List[Tuple], List[str]]:
+        if search_type == "LIKE":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} LIKE %s"
+            params = (search_pattern,)
+        elif search_type == "ILIKE":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} ILIKE %s"
+            params = (search_pattern,)
+        elif search_type == "~":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} ~ %s"
+            params = (search_pattern,)
+        elif search_type == "~*":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} ~* %s"
+            params = (search_pattern,)
+        elif search_type == "!~":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} !~ %s"
+            params = (search_pattern,)
+        elif search_type == "!~*":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} !~* %s"
+            params = (search_pattern,)
+        else:
+            raise ValueError(f"Неподдерживаемый тип поиска: {search_type}")
+        
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            return results, column_names
+        finally:
+            cursor.close()
+    
+    def execute_string_function(self, table_name: str, column_name: str, 
+                                function_type: str, params: Dict[str, Any] = None) -> Tuple[List[Tuple], List[str]]:
+        if function_type == "UPPER":
+            select_expr = f"UPPER({column_name}) as upper_result"
+        elif function_type == "LOWER":
+            select_expr = f"LOWER({column_name}) as lower_result"
+        elif function_type == "SUBSTRING":
+            start = params.get('start', 1)
+            length = params.get('length', '')
+            if length:
+                select_expr = f"SUBSTRING({column_name}, {start}, {length}) as substring_result"
+            else:
+                select_expr = f"SUBSTRING({column_name}, {start}) as substring_result"
+        elif function_type == "TRIM":
+            select_expr = f"TRIM({column_name}) as trim_result"
+        elif function_type == "LTRIM":
+            select_expr = f"LTRIM({column_name}) as ltrim_result"
+        elif function_type == "RTRIM":
+            select_expr = f"RTRIM({column_name}) as rtrim_result"
+        elif function_type == "LPAD":
+            length = params.get('length', 10)
+            fill = params.get('fill', ' ')
+            select_expr = f"LPAD({column_name}, {length}, '{fill}') as lpad_result"
+        elif function_type == "RPAD":
+            length = params.get('length', 10)
+            fill = params.get('fill', ' ')
+            select_expr = f"RPAD({column_name}, {length}, '{fill}') as rpad_result"
+        elif function_type == "CONCAT":
+            concat_with = params.get('concat_with', '')
+            select_expr = f"CONCAT({column_name}, '{concat_with}') as concat_result"
+        elif function_type == "LENGTH":
+            select_expr = f"LENGTH({column_name}) as length_result"
+        else:
+            raise ValueError(f"Неподдерживаемая функция: {function_type}")
+        
+        query = f"SELECT {column_name}, {select_expr} FROM bank_system.{table_name}"
+        
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(query)
+            results = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            return results, column_names
+        finally:
+            cursor.close()
+    
+    def execute_join(self, table1: str, table2: str, join_column1: str, 
+                    join_column2: str, join_type: str = "INNER",
+                    columns: List[str] = None) -> Tuple[List[Tuple], List[str]]:
+        select_cols = ", ".join(columns) if columns else "*"
+        query = f"""
+            SELECT {select_cols} 
+            FROM bank_system.{table1} t1 
+            {join_type} JOIN bank_system.{table2} t2 
+            ON t1.{join_column1} = t2.{join_column2}
+        """
+        
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(query)
+            results = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            return results, column_names
+        finally:
+            cursor.close()

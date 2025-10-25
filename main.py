@@ -7,7 +7,9 @@ from PySide6.QtGui import QFont
 import logging
 from logger_config import setup_logger
 from db_manager import DatabaseManager
-from gui_windows import ConnectionDialog, AddDataDialog, ViewDataDialog
+from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
+                         AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
+                         StringFunctionsDialog, JoinWizardDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -111,6 +113,59 @@ class BankSystemApp(QMainWindow):
         self.btn_view_data.clicked.connect(self.show_view_dialog)
         buttons_layout.addWidget(self.btn_view_data)
 
+        advanced_style = """
+            QPushButton {
+                background-color: #6610f2;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #520dc2;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """
+
+        self.btn_alter_table = QPushButton("ALTER TABLE - Изменить структуру БД")
+        self.btn_alter_table.setMinimumHeight(40)
+        self.btn_alter_table.setEnabled(False)
+        self.btn_alter_table.setStyleSheet(advanced_style)
+        self.btn_alter_table.clicked.connect(self.show_alter_table_dialog)
+        buttons_layout.addWidget(self.btn_alter_table)
+
+        self.btn_advanced_select = QPushButton("Расширенный SELECT")
+        self.btn_advanced_select.setMinimumHeight(40)
+        self.btn_advanced_select.setEnabled(False)
+        self.btn_advanced_select.setStyleSheet(advanced_style)
+        self.btn_advanced_select.clicked.connect(self.show_advanced_select_dialog)
+        buttons_layout.addWidget(self.btn_advanced_select)
+
+        self.btn_text_search = QPushButton("Поиск по тексту (LIKE / REGEX)")
+        self.btn_text_search.setMinimumHeight(40)
+        self.btn_text_search.setEnabled(False)
+        self.btn_text_search.setStyleSheet(advanced_style)
+        self.btn_text_search.clicked.connect(self.show_text_search_dialog)
+        buttons_layout.addWidget(self.btn_text_search)
+
+        self.btn_string_functions = QPushButton("Функции работы со строками")
+        self.btn_string_functions.setMinimumHeight(40)
+        self.btn_string_functions.setEnabled(False)
+        self.btn_string_functions.setStyleSheet(advanced_style)
+        self.btn_string_functions.clicked.connect(self.show_string_functions_dialog)
+        buttons_layout.addWidget(self.btn_string_functions)
+
+        self.btn_join_wizard = QPushButton("Мастер соединений (JOIN)")
+        self.btn_join_wizard.setMinimumHeight(40)
+        self.btn_join_wizard.setEnabled(False)
+        self.btn_join_wizard.setStyleSheet(advanced_style)
+        self.btn_join_wizard.clicked.connect(self.show_join_wizard_dialog)
+        buttons_layout.addWidget(self.btn_join_wizard)
+
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)
         self.btn_reconnect.setStyleSheet("""
@@ -196,6 +251,11 @@ class BankSystemApp(QMainWindow):
             self.btn_insert_data.setEnabled(True)
             self.btn_view_data.setEnabled(True)
             self.btn_drop_schema.setEnabled(True)
+            self.btn_alter_table.setEnabled(True)
+            self.btn_advanced_select.setEnabled(True)
+            self.btn_text_search.setEnabled(True)
+            self.btn_string_functions.setEnabled(True)
+            self.btn_join_wizard.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -290,6 +350,51 @@ class BankSystemApp(QMainWindow):
 
         dialog = ViewDataDialog(self, self.db_manager)
         dialog.exec()
+
+    def show_alter_table_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = AlterTableDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно изменения структуры таблиц")
+
+    def show_advanced_select_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = AdvancedSelectDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно расширенного SELECT")
+
+    def show_text_search_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = TextSearchDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно поиска по тексту")
+
+    def show_string_functions_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = StringFunctionsDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно функций работы со строками")
+
+    def show_join_wizard_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = JoinWizardDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыт мастер соединений таблиц")
 
     def add_log(self, message: str):
         self.log_text.append(f"• {message}")

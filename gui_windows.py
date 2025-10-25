@@ -43,7 +43,7 @@ class ConnectionDialog(QDialog):
         grid.setSpacing(10)
 
         self.host_edit = QLineEdit("localhost")
-        self.port_edit = QLineEdit("5433")
+        self.port_edit = QLineEdit("5432")
         self.database_edit = QLineEdit("postgres")
         self.user_edit = QLineEdit("postgres")
         self.password_edit = QLineEdit()
@@ -914,3 +914,1039 @@ class ViewDataDialog(QDialog):
                     f"Не удалось удалить схему:\n{str(e)}"
                 )
                 self.logger.error(f"Ошибка удаления схема: {e}")
+
+
+class AlterTableDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('AlterTableDialog')
+        
+        self.setWindowTitle("ALTER TABLE - Изменение структуры таблиц")
+        self.setModal(True)
+        self.resize(900, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Изменение структуры базы данных")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        self.tabs = QTabWidget()
+        
+        self.create_add_column_tab()
+        self.create_drop_column_tab()
+        self.create_rename_column_tab()
+        self.create_rename_table_tab()
+        self.create_change_type_tab()
+        self.create_constraints_tab()
+        
+        layout.addWidget(self.tabs)
+        
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d; color: white; padding: 8px;")
+        layout.addWidget(close_btn)
+    
+    def create_add_column_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        grid = QGridLayout()
+        
+        grid.addWidget(QLabel("Таблица:"), 0, 0)
+        self.add_col_table = QComboBox()
+        self.add_col_table.addItems(self.get_tables())
+        grid.addWidget(self.add_col_table, 0, 1)
+        
+        grid.addWidget(QLabel("Имя столбца:"), 1, 0)
+        self.add_col_name = QLineEdit()
+        grid.addWidget(self.add_col_name, 1, 1)
+        
+        grid.addWidget(QLabel("Тип данных:"), 2, 0)
+        self.add_col_type = QComboBox()
+        self.add_col_type.addItems(['VARCHAR(50)', 'VARCHAR(100)', 'INTEGER', 'NUMERIC(10,2)', 'BOOLEAN', 'DATE', 'TIMESTAMP', 'TEXT'])
+        self.add_col_type.setEditable(True)
+        grid.addWidget(self.add_col_type, 2, 1)
+        
+        grid.addWidget(QLabel("Ограничения:"), 3, 0)
+        self.add_col_constraints = QLineEdit()
+        self.add_col_constraints.setPlaceholderText("NOT NULL, DEFAULT 0, CHECK (...)")
+        grid.addWidget(self.add_col_constraints, 3, 1)
+        
+        layout.addLayout(grid)
+        
+        btn = QPushButton("Добавить столбец")
+        btn.clicked.connect(self.add_column)
+        btn.setStyleSheet("background-color: #28a745; color: white; padding: 10px;")
+        layout.addWidget(btn)
+        
+        layout.addStretch()
+        self.tabs.addTab(widget, "Добавить столбец")
+    
+    def create_drop_column_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        grid = QGridLayout()
+        
+        grid.addWidget(QLabel("Таблица:"), 0, 0)
+        self.drop_col_table = QComboBox()
+        self.drop_col_table.addItems(self.get_tables())
+        self.drop_col_table.currentTextChanged.connect(self.update_drop_columns)
+        grid.addWidget(self.drop_col_table, 0, 1)
+        
+        grid.addWidget(QLabel("Столбец:"), 1, 0)
+        self.drop_col_name = QComboBox()
+        grid.addWidget(self.drop_col_name, 1, 1)
+        
+        layout.addLayout(grid)
+        
+        btn = QPushButton("Удалить столбец")
+        btn.clicked.connect(self.drop_column)
+        btn.setStyleSheet("background-color: #dc3545; color: white; padding: 10px;")
+        layout.addWidget(btn)
+        
+        layout.addStretch()
+        self.tabs.addTab(widget, "Удалить столбец")
+        
+        self.update_drop_columns()
+    
+    def create_rename_column_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        grid = QGridLayout()
+        
+        grid.addWidget(QLabel("Таблица:"), 0, 0)
+        self.rename_col_table = QComboBox()
+        self.rename_col_table.addItems(self.get_tables())
+        self.rename_col_table.currentTextChanged.connect(self.update_rename_columns)
+        grid.addWidget(self.rename_col_table, 0, 1)
+        
+        grid.addWidget(QLabel("Старое имя:"), 1, 0)
+        self.rename_col_old = QComboBox()
+        grid.addWidget(self.rename_col_old, 1, 1)
+        
+        grid.addWidget(QLabel("Новое имя:"), 2, 0)
+        self.rename_col_new = QLineEdit()
+        grid.addWidget(self.rename_col_new, 2, 1)
+        
+        layout.addLayout(grid)
+        
+        btn = QPushButton("Переименовать столбец")
+        btn.clicked.connect(self.rename_column)
+        btn.setStyleSheet("background-color: #17a2b8; color: white; padding: 10px;")
+        layout.addWidget(btn)
+        
+        layout.addStretch()
+        self.tabs.addTab(widget, "Переименовать столбец")
+        
+        self.update_rename_columns()
+    
+    def create_rename_table_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        grid = QGridLayout()
+        
+        grid.addWidget(QLabel("Старое имя таблицы:"), 0, 0)
+        self.rename_table_old = QComboBox()
+        self.rename_table_old.addItems(self.get_tables())
+        grid.addWidget(self.rename_table_old, 0, 1)
+        
+        grid.addWidget(QLabel("Новое имя таблицы:"), 1, 0)
+        self.rename_table_new = QLineEdit()
+        grid.addWidget(self.rename_table_new, 1, 1)
+        
+        layout.addLayout(grid)
+        
+        btn = QPushButton("Переименовать таблицу")
+        btn.clicked.connect(self.rename_table)
+        btn.setStyleSheet("background-color: #ffc107; color: black; padding: 10px;")
+        layout.addWidget(btn)
+        
+        layout.addStretch()
+        self.tabs.addTab(widget, "Переименовать таблицу")
+    
+    def create_change_type_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        grid = QGridLayout()
+        
+        grid.addWidget(QLabel("Таблица:"), 0, 0)
+        self.change_type_table = QComboBox()
+        self.change_type_table.addItems(self.get_tables())
+        self.change_type_table.currentTextChanged.connect(self.update_change_type_columns)
+        grid.addWidget(self.change_type_table, 0, 1)
+        
+        grid.addWidget(QLabel("Столбец:"), 1, 0)
+        self.change_type_column = QComboBox()
+        grid.addWidget(self.change_type_column, 1, 1)
+        
+        grid.addWidget(QLabel("Новый тип:"), 2, 0)
+        self.change_type_new = QComboBox()
+        self.change_type_new.addItems(['VARCHAR(50)', 'VARCHAR(100)', 'INTEGER', 'NUMERIC(10,2)', 'BOOLEAN', 'DATE', 'TIMESTAMP', 'TEXT'])
+        self.change_type_new.setEditable(True)
+        grid.addWidget(self.change_type_new, 2, 1)
+        
+        layout.addLayout(grid)
+        
+        btn = QPushButton("Изменить тип данных")
+        btn.clicked.connect(self.change_type)
+        btn.setStyleSheet("background-color: #6610f2; color: white; padding: 10px;")
+        layout.addWidget(btn)
+        
+        layout.addStretch()
+        self.tabs.addTab(widget, "Изменить тип")
+        
+        self.update_change_type_columns()
+    
+    def create_constraints_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        constraint_tabs = QTabWidget()
+        
+        not_null_widget = QWidget()
+        not_null_layout = QVBoxLayout(not_null_widget)
+        grid1 = QGridLayout()
+        grid1.addWidget(QLabel("Таблица:"), 0, 0)
+        self.nn_table = QComboBox()
+        self.nn_table.addItems(self.get_tables())
+        self.nn_table.currentTextChanged.connect(self.update_nn_columns)
+        grid1.addWidget(self.nn_table, 0, 1)
+        grid1.addWidget(QLabel("Столбец:"), 1, 0)
+        self.nn_column = QComboBox()
+        grid1.addWidget(self.nn_column, 1, 1)
+        not_null_layout.addLayout(grid1)
+        btn1 = QPushButton("Установить NOT NULL")
+        btn1.clicked.connect(self.set_not_null)
+        btn1.setStyleSheet("background-color: #28a745; color: white; padding: 8px;")
+        not_null_layout.addWidget(btn1)
+        btn2 = QPushButton("Убрать NOT NULL")
+        btn2.clicked.connect(self.drop_not_null)
+        btn2.setStyleSheet("background-color: #dc3545; color: white; padding: 8px;")
+        not_null_layout.addWidget(btn2)
+        not_null_layout.addStretch()
+        constraint_tabs.addTab(not_null_widget, "NOT NULL")
+        self.update_nn_columns()
+        
+        add_constraint_widget = QWidget()
+        add_constraint_layout = QVBoxLayout(add_constraint_widget)
+        grid2 = QGridLayout()
+        grid2.addWidget(QLabel("Таблица:"), 0, 0)
+        self.add_constr_table = QComboBox()
+        self.add_constr_table.addItems(self.get_tables())
+        grid2.addWidget(self.add_constr_table, 0, 1)
+        grid2.addWidget(QLabel("Имя ограничения:"), 1, 0)
+        self.add_constr_name = QLineEdit()
+        self.add_constr_name.setPlaceholderText("chk_balance_positive")
+        grid2.addWidget(self.add_constr_name, 1, 1)
+        grid2.addWidget(QLabel("Определение:"), 2, 0)
+        self.add_constr_def = QLineEdit()
+        self.add_constr_def.setPlaceholderText("CHECK (balance >= 0)")
+        grid2.addWidget(self.add_constr_def, 2, 1)
+        add_constraint_layout.addLayout(grid2)
+        btn3 = QPushButton("Добавить ограничение")
+        btn3.clicked.connect(self.add_constraint)
+        btn3.setStyleSheet("background-color: #28a745; color: white; padding: 8px;")
+        add_constraint_layout.addWidget(btn3)
+        add_constraint_layout.addStretch()
+        constraint_tabs.addTab(add_constraint_widget, "Добавить ограничение")
+        
+        drop_constraint_widget = QWidget()
+        drop_constraint_layout = QVBoxLayout(drop_constraint_widget)
+        grid3 = QGridLayout()
+        grid3.addWidget(QLabel("Таблица:"), 0, 0)
+        self.drop_constr_table = QComboBox()
+        self.drop_constr_table.addItems(self.get_tables())
+        grid3.addWidget(self.drop_constr_table, 0, 1)
+        grid3.addWidget(QLabel("Имя ограничения:"), 1, 0)
+        self.drop_constr_name = QLineEdit()
+        self.drop_constr_name.setPlaceholderText("chk_balance_positive")
+        grid3.addWidget(self.drop_constr_name, 1, 1)
+        drop_constraint_layout.addLayout(grid3)
+        btn4 = QPushButton("Удалить ограничение")
+        btn4.clicked.connect(self.drop_constraint)
+        btn4.setStyleSheet("background-color: #dc3545; color: white; padding: 8px;")
+        drop_constraint_layout.addWidget(btn4)
+        drop_constraint_layout.addStretch()
+        constraint_tabs.addTab(drop_constraint_widget, "Удалить ограничение")
+        
+        layout.addWidget(constraint_tabs)
+        
+        self.tabs.addTab(widget, "Ограничения")
+    
+    def get_tables(self):
+        try:
+            return self.db_manager.get_tables_list()
+        except:
+            return []
+    
+    def get_columns(self, table_name):
+        try:
+            columns = self.db_manager.get_table_columns(table_name)
+            return [col['name'] for col in columns]
+        except:
+            return []
+    
+    def update_drop_columns(self):
+        table = self.drop_col_table.currentText()
+        self.drop_col_name.clear()
+        if table:
+            self.drop_col_name.addItems(self.get_columns(table))
+    
+    def update_rename_columns(self):
+        table = self.rename_col_table.currentText()
+        self.rename_col_old.clear()
+        if table:
+            self.rename_col_old.addItems(self.get_columns(table))
+    
+    def update_change_type_columns(self):
+        table = self.change_type_table.currentText()
+        self.change_type_column.clear()
+        if table:
+            self.change_type_column.addItems(self.get_columns(table))
+    
+    def update_nn_columns(self):
+        table = self.nn_table.currentText()
+        self.nn_column.clear()
+        if table:
+            self.nn_column.addItems(self.get_columns(table))
+    
+    def add_column(self):
+        try:
+            table = self.add_col_table.currentText()
+            col_name = self.add_col_name.text().strip()
+            col_type = self.add_col_type.currentText().strip()
+            constraints = self.add_col_constraints.text().strip()
+            
+            if not col_name or not col_type:
+                QMessageBox.warning(self, "Ошибка", "Заполните все обязательные поля")
+                return
+            
+            self.db_manager.alter_table_add_column(table, col_name, col_type, constraints)
+            QMessageBox.information(self, "Успех", f"Столбец '{col_name}' добавлен в таблицу '{table}'")
+            self.add_col_name.clear()
+            self.add_col_constraints.clear()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить столбец:\n{str(e)}")
+    
+    def drop_column(self):
+        try:
+            table = self.drop_col_table.currentText()
+            col_name = self.drop_col_name.currentText()
+            
+            reply = QMessageBox.question(self, "Подтверждение", 
+                                        f"Удалить столбец '{col_name}' из таблицы '{table}'?",
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.db_manager.alter_table_drop_column(table, col_name)
+                QMessageBox.information(self, "Успех", f"Столбец '{col_name}' удален")
+                self.update_drop_columns()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось удалить столбец:\n{str(e)}")
+    
+    def rename_column(self):
+        try:
+            table = self.rename_col_table.currentText()
+            old_name = self.rename_col_old.currentText()
+            new_name = self.rename_col_new.text().strip()
+            
+            if not new_name:
+                QMessageBox.warning(self, "Ошибка", "Укажите новое имя")
+                return
+            
+            self.db_manager.alter_table_rename_column(table, old_name, new_name)
+            QMessageBox.information(self, "Успех", f"Столбец переименован: '{old_name}' → '{new_name}'")
+            self.rename_col_new.clear()
+            self.update_rename_columns()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать столбец:\n{str(e)}")
+    
+    def rename_table(self):
+        try:
+            old_name = self.rename_table_old.currentText()
+            new_name = self.rename_table_new.text().strip()
+            
+            if not new_name:
+                QMessageBox.warning(self, "Ошибка", "Укажите новое имя таблицы")
+                return
+            
+            reply = QMessageBox.question(self, "Подтверждение", 
+                                        f"Переименовать таблицу '{old_name}' в '{new_name}'?",
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.db_manager.alter_table_rename_table(old_name, new_name)
+                QMessageBox.information(self, "Успех", f"Таблица переименована: '{old_name}' → '{new_name}'")
+                self.rename_table_new.clear()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать таблицу:\n{str(e)}")
+    
+    def change_type(self):
+        try:
+            table = self.change_type_table.currentText()
+            column = self.change_type_column.currentText()
+            new_type = self.change_type_new.currentText().strip()
+            
+            if not new_type:
+                QMessageBox.warning(self, "Ошибка", "Укажите новый тип данных")
+                return
+            
+            reply = QMessageBox.question(self, "Подтверждение", 
+                                        f"Изменить тип столбца '{column}' на '{new_type}'?",
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.db_manager.alter_table_change_type(table, column, new_type)
+                QMessageBox.information(self, "Успех", f"Тип столбца '{column}' изменен на '{new_type}'")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось изменить тип:\n{str(e)}")
+    
+    def set_not_null(self):
+        try:
+            table = self.nn_table.currentText()
+            column = self.nn_column.currentText()
+            
+            self.db_manager.alter_table_set_not_null(table, column)
+            QMessageBox.information(self, "Успех", f"NOT NULL установлен для столбца '{column}'")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось установить NOT NULL:\n{str(e)}")
+    
+    def drop_not_null(self):
+        try:
+            table = self.nn_table.currentText()
+            column = self.nn_column.currentText()
+            
+            self.db_manager.alter_table_drop_not_null(table, column)
+            QMessageBox.information(self, "Успех", f"NOT NULL убран для столбца '{column}'")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось убрать NOT NULL:\n{str(e)}")
+    
+    def add_constraint(self):
+        try:
+            table = self.add_constr_table.currentText()
+            name = self.add_constr_name.text().strip()
+            definition = self.add_constr_def.text().strip()
+            
+            if not name or not definition:
+                QMessageBox.warning(self, "Ошибка", "Заполните все поля")
+                return
+            
+            self.db_manager.alter_table_add_constraint(table, name, definition)
+            QMessageBox.information(self, "Успех", f"Ограничение '{name}' добавлено")
+            self.add_constr_name.clear()
+            self.add_constr_def.clear()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить ограничение:\n{str(e)}")
+    
+    def drop_constraint(self):
+        try:
+            table = self.drop_constr_table.currentText()
+            name = self.drop_constr_name.text().strip()
+            
+            if not name:
+                QMessageBox.warning(self, "Ошибка", "Укажите имя ограничения")
+                return
+            
+            reply = QMessageBox.question(self, "Подтверждение", 
+                                        f"Удалить ограничение '{name}' из таблицы '{table}'?",
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.db_manager.alter_table_drop_constraint(table, name)
+                QMessageBox.information(self, "Успех", f"Ограничение '{name}' удалено")
+                self.drop_constr_name.clear()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось удалить ограничение:\n{str(e)}")
+
+
+class AdvancedSelectDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('AdvancedSelectDialog')
+        
+        self.setWindowTitle("Расширенный SELECT")
+        self.setModal(True)
+        self.resize(1200, 800)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Расширенные запросы SELECT")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        controls_group = QGroupBox("Параметры запроса")
+        controls_layout = QGridLayout()
+        
+        controls_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(self.get_tables())
+        self.table_combo.currentTextChanged.connect(self.update_columns)
+        controls_layout.addWidget(self.table_combo, 0, 1, 1, 3)
+        
+        controls_layout.addWidget(QLabel("SELECT столбцы:"), 1, 0)
+        self.columns_edit = QLineEdit()
+        self.columns_edit.setPlaceholderText("*, col1, col2, COUNT(*), SUM(amount)")
+        controls_layout.addWidget(self.columns_edit, 1, 1, 1, 3)
+        
+        controls_layout.addWidget(QLabel("WHERE условие:"), 2, 0)
+        self.where_edit = QLineEdit()
+        self.where_edit.setPlaceholderText("amount > 100 AND status = 'ACTIVE'")
+        controls_layout.addWidget(self.where_edit, 2, 1, 1, 3)
+        
+        controls_layout.addWidget(QLabel("ORDER BY:"), 3, 0)
+        self.order_edit = QLineEdit()
+        self.order_edit.setPlaceholderText("column_name ASC, column2 DESC")
+        controls_layout.addWidget(self.order_edit, 3, 1, 1, 3)
+        
+        controls_layout.addWidget(QLabel("GROUP BY:"), 4, 0)
+        self.group_edit = QLineEdit()
+        self.group_edit.setPlaceholderText("column_name")
+        controls_layout.addWidget(self.group_edit, 4, 1, 1, 3)
+        
+        controls_layout.addWidget(QLabel("HAVING:"), 5, 0)
+        self.having_edit = QLineEdit()
+        self.having_edit.setPlaceholderText("COUNT(*) > 5")
+        controls_layout.addWidget(self.having_edit, 5, 1, 1, 3)
+        
+        controls_group.setLayout(controls_layout)
+        layout.addWidget(controls_group)
+        
+        execute_btn = QPushButton("Выполнить запрос")
+        execute_btn.clicked.connect(self.execute_query)
+        execute_btn.setStyleSheet("background-color: #28a745; color: white; padding: 10px; font-weight: bold;")
+        layout.addWidget(execute_btn)
+        
+        self.result_table = QTableWidget()
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel()
+        self.sql_label.setStyleSheet("font-family: monospace; background-color: #f0f0f0; padding: 5px;")
+        self.sql_label.setWordWrap(True)
+        layout.addWidget(self.sql_label)
+        
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d; color: white; padding: 8px;")
+        layout.addWidget(close_btn)
+    
+    def get_tables(self):
+        try:
+            return self.db_manager.get_tables_list()
+        except:
+            return []
+    
+    def update_columns(self):
+        pass
+    
+    def execute_query(self):
+        try:
+            table = self.table_combo.currentText()
+            columns_str = self.columns_edit.text().strip()
+            where = self.where_edit.text().strip()
+            order = self.order_edit.text().strip()
+            group = self.group_edit.text().strip()
+            having = self.having_edit.text().strip()
+            
+            columns = [c.strip() for c in columns_str.split(',')] if columns_str and columns_str != '*' else None
+            
+            sql = f"SELECT {columns_str if columns_str else '*'} FROM bank_system.{table}"
+            if where:
+                sql += f" WHERE {where}"
+            if group:
+                sql += f" GROUP BY {group}"
+            if having:
+                sql += f" HAVING {having}"
+            if order:
+                sql += f" ORDER BY {order}"
+            
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            results, column_names = self.db_manager.execute_advanced_select(
+                table, columns, where, order, group, having
+            )
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось выполнить запрос:\n{str(e)}")
+            self.logger.error(f"Query error: {e}")
+
+
+class TextSearchDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('TextSearchDialog')
+        
+        self.setWindowTitle("Поиск по тексту")
+        self.setModal(True)
+        self.resize(1000, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Поиск по тексту (LIKE и POSIX регулярные выражения)")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        controls_group = QGroupBox("Параметры поиска")
+        controls_layout = QGridLayout()
+        
+        controls_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(self.get_tables())
+        self.table_combo.currentTextChanged.connect(self.update_columns)
+        controls_layout.addWidget(self.table_combo, 0, 1)
+        
+        controls_layout.addWidget(QLabel("Столбец:"), 1, 0)
+        self.column_combo = QComboBox()
+        controls_layout.addWidget(self.column_combo, 1, 1)
+        
+        controls_layout.addWidget(QLabel("Тип поиска:"), 2, 0)
+        self.search_type_combo = QComboBox()
+        self.search_type_combo.addItems([
+            'LIKE (шаблон)',
+            'ILIKE (регистронезависимый)',
+            '~ (regex)',
+            '~* (regex без учета регистра)',
+            '!~ (не соответствует regex)',
+            '!~* (не соответствует regex без учета регистра)'
+        ])
+        controls_layout.addWidget(self.search_type_combo, 2, 1)
+        
+        controls_layout.addWidget(QLabel("Шаблон/Регулярное выражение:"), 3, 0)
+        self.pattern_edit = QLineEdit()
+        self.pattern_edit.setPlaceholderText("%текст%, ^[A-Z], .*@gmail\\.com")
+        controls_layout.addWidget(self.pattern_edit, 3, 1)
+        
+        controls_group.setLayout(controls_layout)
+        layout.addWidget(controls_group)
+        
+        info_label = QLabel(
+            "LIKE: используйте % (любые символы), _ (один символ)\n"
+            "POSIX regex: ^ (начало), $ (конец), . (любой), * (повтор), [A-Z] (класс)"
+        )
+        info_label.setStyleSheet("background-color: #e7f3ff; padding: 5px; border: 1px solid #b3d9ff;")
+        layout.addWidget(info_label)
+        
+        search_btn = QPushButton("Выполнить поиск")
+        search_btn.clicked.connect(self.execute_search)
+        search_btn.setStyleSheet("background-color: #28a745; color: white; padding: 10px; font-weight: bold;")
+        layout.addWidget(search_btn)
+        
+        self.result_table = QTableWidget()
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.result_table)
+        
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d; color: white; padding: 8px;")
+        layout.addWidget(close_btn)
+        
+        self.update_columns()
+    
+    def get_tables(self):
+        try:
+            return self.db_manager.get_tables_list()
+        except:
+            return []
+    
+    def update_columns(self):
+        table = self.table_combo.currentText()
+        self.column_combo.clear()
+        if table:
+            try:
+                columns = self.db_manager.get_table_columns(table)
+                self.column_combo.addItems([col['name'] for col in columns])
+            except:
+                pass
+    
+    def execute_search(self):
+        try:
+            table = self.table_combo.currentText()
+            column = self.column_combo.currentText()
+            pattern = self.pattern_edit.text()
+            search_type_text = self.search_type_combo.currentText()
+            
+            type_map = {
+                'LIKE (шаблон)': 'LIKE',
+                'ILIKE (регистронезависимый)': 'ILIKE',
+                '~ (regex)': '~',
+                '~* (regex без учета регистра)': '~*',
+                '!~ (не соответствует regex)': '!~',
+                '!~* (не соответствует regex без учета регистра)': '!~*'
+            }
+            search_type = type_map[search_type_text]
+            
+            if not pattern:
+                QMessageBox.warning(self, "Ошибка", "Введите шаблон для поиска")
+                return
+            
+            results, column_names = self.db_manager.execute_text_search(
+                table, column, pattern, search_type
+            )
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось выполнить поиск:\n{str(e)}")
+            self.logger.error(f"Search error: {e}")
+
+
+class StringFunctionsDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('StringFunctionsDialog')
+        
+        self.setWindowTitle("Функции работы со строками")
+        self.setModal(True)
+        self.resize(1000, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Функции работы со строками")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        controls_group = QGroupBox("Параметры")
+        controls_layout = QGridLayout()
+        
+        controls_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(self.get_tables())
+        self.table_combo.currentTextChanged.connect(self.update_columns)
+        controls_layout.addWidget(self.table_combo, 0, 1)
+        
+        controls_layout.addWidget(QLabel("Столбец:"), 1, 0)
+        self.column_combo = QComboBox()
+        controls_layout.addWidget(self.column_combo, 1, 1)
+        
+        controls_layout.addWidget(QLabel("Функция:"), 2, 0)
+        self.function_combo = QComboBox()
+        self.function_combo.addItems([
+            'UPPER (верхний регистр)',
+            'LOWER (нижний регистр)',
+            'SUBSTRING (подстрока)',
+            'TRIM (убрать пробелы)',
+            'LTRIM (убрать слева)',
+            'RTRIM (убрать справа)',
+            'LPAD (дополнить слева)',
+            'RPAD (дополнить справа)',
+            'CONCAT (объединить)',
+            'LENGTH (длина строки)'
+        ])
+        self.function_combo.currentTextChanged.connect(self.update_param_fields)
+        controls_layout.addWidget(self.function_combo, 2, 1)
+        
+        self.params_widget = QWidget()
+        self.params_layout = QGridLayout(self.params_widget)
+        controls_layout.addWidget(self.params_widget, 3, 0, 1, 2)
+        
+        controls_group.setLayout(controls_layout)
+        layout.addWidget(controls_group)
+        
+        execute_btn = QPushButton("Применить функцию")
+        execute_btn.clicked.connect(self.execute_function)
+        execute_btn.setStyleSheet("background-color: #28a745; color: white; padding: 10px; font-weight: bold;")
+        layout.addWidget(execute_btn)
+        
+        self.result_table = QTableWidget()
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.result_table)
+        
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d; color: white; padding: 8px;")
+        layout.addWidget(close_btn)
+        
+        self.update_columns()
+        self.update_param_fields()
+    
+    def get_tables(self):
+        try:
+            return self.db_manager.get_tables_list()
+        except:
+            return []
+    
+    def update_columns(self):
+        table = self.table_combo.currentText()
+        self.column_combo.clear()
+        if table:
+            try:
+                columns = self.db_manager.get_table_columns(table)
+                self.column_combo.addItems([col['name'] for col in columns])
+            except:
+                pass
+    
+    def update_param_fields(self):
+        while self.params_layout.count():
+            child = self.params_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        func_text = self.function_combo.currentText()
+        
+        if 'SUBSTRING' in func_text:
+            self.params_layout.addWidget(QLabel("Начало (start):"), 0, 0)
+            self.start_edit = QLineEdit("1")
+            self.params_layout.addWidget(self.start_edit, 0, 1)
+            self.params_layout.addWidget(QLabel("Длина (length):"), 1, 0)
+            self.length_edit = QLineEdit()
+            self.length_edit.setPlaceholderText("Оставьте пустым для всей строки")
+            self.params_layout.addWidget(self.length_edit, 1, 1)
+        elif 'LPAD' in func_text or 'RPAD' in func_text:
+            self.params_layout.addWidget(QLabel("Длина:"), 0, 0)
+            self.pad_length_edit = QLineEdit("10")
+            self.params_layout.addWidget(self.pad_length_edit, 0, 1)
+            self.params_layout.addWidget(QLabel("Символ заполнения:"), 1, 0)
+            self.pad_fill_edit = QLineEdit(" ")
+            self.params_layout.addWidget(self.pad_fill_edit, 1, 1)
+        elif 'CONCAT' in func_text:
+            self.params_layout.addWidget(QLabel("Добавить текст:"), 0, 0)
+            self.concat_edit = QLineEdit()
+            self.concat_edit.setPlaceholderText("Текст для добавления")
+            self.params_layout.addWidget(self.concat_edit, 0, 1)
+    
+    def execute_function(self):
+        try:
+            table = self.table_combo.currentText()
+            column = self.column_combo.currentText()
+            func_text = self.function_combo.currentText()
+            
+            func_map = {
+                'UPPER (верхний регистр)': 'UPPER',
+                'LOWER (нижний регистр)': 'LOWER',
+                'SUBSTRING (подстрока)': 'SUBSTRING',
+                'TRIM (убрать пробелы)': 'TRIM',
+                'LTRIM (убрать слева)': 'LTRIM',
+                'RTRIM (убрать справа)': 'RTRIM',
+                'LPAD (дополнить слева)': 'LPAD',
+                'RPAD (дополнить справа)': 'RPAD',
+                'CONCAT (объединить)': 'CONCAT',
+                'LENGTH (длина строки)': 'LENGTH'
+            }
+            func_type = func_map[func_text]
+            
+            params = {}
+            if func_type == 'SUBSTRING':
+                params['start'] = int(self.start_edit.text())
+                if self.length_edit.text():
+                    params['length'] = int(self.length_edit.text())
+            elif func_type in ['LPAD', 'RPAD']:
+                params['length'] = int(self.pad_length_edit.text())
+                params['fill'] = self.pad_fill_edit.text()
+            elif func_type == 'CONCAT':
+                params['concat_with'] = self.concat_edit.text()
+            
+            results, column_names = self.db_manager.execute_string_function(
+                table, column, func_type, params
+            )
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Обработано записей: {len(results)}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось выполнить функцию:\n{str(e)}")
+            self.logger.error(f"Function error: {e}")
+
+
+class JoinWizardDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('JoinWizardDialog')
+        
+        self.setWindowTitle("Мастер соединений (JOIN)")
+        self.setModal(True)
+        self.resize(1200, 800)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Мастер соединений таблиц")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        controls_group = QGroupBox("Параметры соединения")
+        controls_layout = QGridLayout()
+        
+        controls_layout.addWidget(QLabel("Первая таблица:"), 0, 0)
+        self.table1_combo = QComboBox()
+        self.table1_combo.addItems(self.get_tables())
+        self.table1_combo.currentTextChanged.connect(self.update_columns1)
+        controls_layout.addWidget(self.table1_combo, 0, 1)
+        
+        controls_layout.addWidget(QLabel("Поле связи (таблица 1):"), 1, 0)
+        self.column1_combo = QComboBox()
+        controls_layout.addWidget(self.column1_combo, 1, 1)
+        
+        controls_layout.addWidget(QLabel("Вторая таблица:"), 2, 0)
+        self.table2_combo = QComboBox()
+        self.table2_combo.addItems(self.get_tables())
+        self.table2_combo.currentTextChanged.connect(self.update_columns2)
+        controls_layout.addWidget(self.table2_combo, 2, 1)
+        
+        controls_layout.addWidget(QLabel("Поле связи (таблица 2):"), 3, 0)
+        self.column2_combo = QComboBox()
+        controls_layout.addWidget(self.column2_combo, 3, 1)
+        
+        controls_layout.addWidget(QLabel("Тип соединения:"), 4, 0)
+        self.join_type_combo = QComboBox()
+        self.join_type_combo.addItems([
+            'INNER (внутреннее)',
+            'LEFT (левое)',
+            'RIGHT (правое)',
+            'FULL (полное)'
+        ])
+        controls_layout.addWidget(self.join_type_combo, 4, 1)
+        
+        controls_layout.addWidget(QLabel("Столбцы для вывода:"), 5, 0)
+        self.columns_edit = QLineEdit()
+        self.columns_edit.setPlaceholderText("* (все) или t1.col1, t2.col2, ...")
+        controls_layout.addWidget(self.columns_edit, 5, 1)
+        
+        controls_group.setLayout(controls_layout)
+        layout.addWidget(controls_group)
+        
+        info_label = QLabel(
+            "INNER: только совпадающие записи | LEFT: все из 1-й + совпадения из 2-й\n"
+            "RIGHT: все из 2-й + совпадения из 1-й | FULL: все записи из обеих таблиц"
+        )
+        info_label.setStyleSheet("background-color: #e7f3ff; padding: 5px; border: 1px solid #b3d9ff;")
+        layout.addWidget(info_label)
+        
+        execute_btn = QPushButton("Выполнить соединение")
+        execute_btn.clicked.connect(self.execute_join)
+        execute_btn.setStyleSheet("background-color: #28a745; color: white; padding: 10px; font-weight: bold;")
+        layout.addWidget(execute_btn)
+        
+        self.result_table = QTableWidget()
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel()
+        self.sql_label.setStyleSheet("font-family: monospace; background-color: #f0f0f0; padding: 5px;")
+        self.sql_label.setWordWrap(True)
+        layout.addWidget(self.sql_label)
+        
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d; color: white; padding: 8px;")
+        layout.addWidget(close_btn)
+        
+        self.update_columns1()
+        self.update_columns2()
+    
+    def get_tables(self):
+        try:
+            return self.db_manager.get_tables_list()
+        except:
+            return []
+    
+    def update_columns1(self):
+        table = self.table1_combo.currentText()
+        self.column1_combo.clear()
+        if table:
+            try:
+                columns = self.db_manager.get_table_columns(table)
+                self.column1_combo.addItems([col['name'] for col in columns])
+            except:
+                pass
+    
+    def update_columns2(self):
+        table = self.table2_combo.currentText()
+        self.column2_combo.clear()
+        if table:
+            try:
+                columns = self.db_manager.get_table_columns(table)
+                self.column2_combo.addItems([col['name'] for col in columns])
+            except:
+                pass
+    
+    def execute_join(self):
+        try:
+            table1 = self.table1_combo.currentText()
+            table2 = self.table2_combo.currentText()
+            column1 = self.column1_combo.currentText()
+            column2 = self.column2_combo.currentText()
+            join_type_text = self.join_type_combo.currentText()
+            columns_str = self.columns_edit.text().strip()
+            
+            join_map = {
+                'INNER (внутреннее)': 'INNER',
+                'LEFT (левое)': 'LEFT',
+                'RIGHT (правое)': 'RIGHT',
+                'FULL (полное)': 'FULL'
+            }
+            join_type = join_map[join_type_text]
+            
+            columns = None
+            if columns_str and columns_str != '*':
+                columns = [c.strip() for c in columns_str.split(',')]
+            
+            sql = f"SELECT {columns_str if columns_str else '*'} FROM bank_system.{table1} t1 {join_type} JOIN bank_system.{table2} t2 ON t1.{column1} = t2.{column2}"
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            results, column_names = self.db_manager.execute_join(
+                table1, table2, column1, column2, join_type, columns
+            )
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось выполнить соединение:\n{str(e)}")
+            self.logger.error(f"Join error: {e}")

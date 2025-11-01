@@ -21,12 +21,8 @@ class ConnectionDialog(QDialog):
         self.setup_ui()
 
     def setup_ui(self):
-        """Настроить пользовательский интерфейс"""
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
-
-        self.setup_ui()
-        self.initialize_database_connection()
 
         self.setStyleSheet("""
             QPushButton {

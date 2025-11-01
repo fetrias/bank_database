@@ -603,3 +603,37 @@ class DatabaseManager:
             return results, column_names
         finally:
             cursor.close()
+    
+    def execute_subquery_filter(self, main_table: str, subquery_table: str, 
+                               operator: str, column: str, sub_column: str) -> Tuple[List[Tuple], List[str]]:
+        if operator == "IN":
+            query = f"""
+                SELECT * FROM bank_system.{main_table}
+                WHERE {column} IN (SELECT {sub_column} FROM bank_system.{subquery_table})
+            """
+        elif operator == "ANY":
+            query = f"""
+                SELECT * FROM bank_system.{main_table}
+                WHERE {column} = ANY(SELECT {sub_column} FROM bank_system.{subquery_table})
+            """
+        elif operator == "ALL":
+            query = f"""
+                SELECT * FROM bank_system.{main_table}
+                WHERE {column} = ALL(SELECT {sub_column} FROM bank_system.{subquery_table})
+            """
+        elif operator == "EXISTS":
+            query = f"""
+                SELECT * FROM bank_system.{main_table}
+                WHERE EXISTS (SELECT 1 FROM bank_system.{subquery_table} WHERE {sub_column} = {column})
+            """
+        else:
+            raise ValueError(f"Неподдерживаемый оператор: {operator}")
+        
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(query)
+            results = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            return results, column_names
+        finally:
+            cursor.close()

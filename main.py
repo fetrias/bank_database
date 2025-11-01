@@ -9,7 +9,7 @@ from logger_config import setup_logger
 from db_manager import DatabaseManager
 from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
-                         StringFunctionsDialog, JoinWizardDialog)
+                         StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -166,6 +166,13 @@ class BankSystemApp(QMainWindow):
         self.btn_join_wizard.clicked.connect(self.show_join_wizard_dialog)
         buttons_layout.addWidget(self.btn_join_wizard)
 
+        self.btn_subquery_filter = QPushButton("Фильтры на основе подзапросов")
+        self.btn_subquery_filter.setMinimumHeight(40)
+        self.btn_subquery_filter.setEnabled(False)
+        self.btn_subquery_filter.setStyleSheet(advanced_style)
+        self.btn_subquery_filter.clicked.connect(self.show_subquery_filter_dialog)
+        buttons_layout.addWidget(self.btn_subquery_filter)
+
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)
         self.btn_reconnect.setStyleSheet("""
@@ -256,6 +263,7 @@ class BankSystemApp(QMainWindow):
             self.btn_text_search.setEnabled(True)
             self.btn_string_functions.setEnabled(True)
             self.btn_join_wizard.setEnabled(True)
+            self.btn_subquery_filter.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -395,6 +403,15 @@ class BankSystemApp(QMainWindow):
         dialog = JoinWizardDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыт мастер соединений таблиц")
+
+    def show_subquery_filter_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = SubqueryFilterDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно фильтров подзапросов")
 
     def add_log(self, message: str):
         self.log_text.append(f"• {message}")

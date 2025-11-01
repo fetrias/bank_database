@@ -1949,3 +1949,136 @@ class JoinWizardDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось выполнить соединение:\n{str(e)}")
             self.logger.error(f"Join error: {e}")
+
+
+class SubqueryFilterDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('SubqueryFilterDialog')
+        
+        self.setWindowTitle("Фильтры подзапросами")
+        self.setModal(True)
+        self.resize(1200, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+        """)
+        
+        title = QLabel("Применить фильтры на основе подзапросов")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        filter_layout = QGridLayout()
+        
+        filter_layout.addWidget(QLabel("Основная таблица:"), 0, 0)
+        self.main_table = QComboBox()
+        self.main_table.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.main_table.currentTextChanged.connect(self.on_main_table_changed)
+        filter_layout.addWidget(self.main_table, 0, 1)
+        
+        filter_layout.addWidget(QLabel("Колонка:"), 0, 2)
+        self.main_column = QComboBox()
+        filter_layout.addWidget(self.main_column, 0, 3)
+        
+        filter_layout.addWidget(QLabel("Оператор:"), 1, 0)
+        self.operator = QComboBox()
+        self.operator.addItems(['IN', 'ANY', 'ALL', 'EXISTS'])
+        filter_layout.addWidget(self.operator, 1, 1)
+        
+        filter_layout.addWidget(QLabel("Таблица подзапроса:"), 1, 2)
+        self.sub_table = QComboBox()
+        self.sub_table.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.sub_table.currentTextChanged.connect(self.on_sub_table_changed)
+        filter_layout.addWidget(self.sub_table, 1, 3)
+        
+        filter_layout.addWidget(QLabel("Колонка подзапроса:"), 2, 0)
+        self.sub_column = QComboBox()
+        filter_layout.addWidget(self.sub_column, 2, 1)
+        
+        apply_btn = QPushButton("Применить фильтр")
+        apply_btn.clicked.connect(self.apply_filter)
+        filter_layout.addWidget(apply_btn, 2, 3)
+        
+        layout.addLayout(filter_layout)
+        
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(0)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.result_table.verticalHeader().setDefaultSectionSize(30)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel("SQL:")
+        self.sql_label.setStyleSheet("color: #666; font-size: 9pt;")
+        layout.addWidget(self.sql_label)
+        
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        buttons_layout.addWidget(close_btn)
+        layout.addLayout(buttons_layout)
+        
+        self.on_main_table_changed()
+    
+    def on_main_table_changed(self):
+        table = self.main_table.currentText()
+        self.main_column.clear()
+        try:
+            columns = self.db_manager.get_table_columns(table)
+            self.main_column.addItems([col['name'] for col in columns])
+        except:
+            pass
+    
+    def on_sub_table_changed(self):
+        table = self.sub_table.currentText()
+        self.sub_column.clear()
+        try:
+            columns = self.db_manager.get_table_columns(table)
+            self.sub_column.addItems([col['name'] for col in columns])
+        except:
+            pass
+    
+    def apply_filter(self):
+        try:
+            main_table = self.main_table.currentText()
+            main_col = self.main_column.currentText()
+            operator = self.operator.currentText()
+            sub_table = self.sub_table.currentText()
+            sub_col = self.sub_column.currentText()
+            
+            results, column_names = self.db_manager.execute_subquery_filter(
+                main_table, sub_table, operator, main_col, sub_col
+            )
+            
+            sql = f"SELECT * FROM bank_system.{main_table} WHERE {main_col} {operator} (SELECT {sub_col} FROM bank_system.{sub_table})"
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка фильтра:\n{str(e)}")
+            self.logger.error(f"Subquery filter error: {e}")

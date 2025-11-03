@@ -2043,8 +2043,8 @@ class SubqueryFilterDialog(QDialog):
         try:
             columns = self.db_manager.get_table_columns(table)
             self.main_column.addItems([col['name'] for col in columns])
-        except:
-            pass
+        except Exception as e:
+            self.logger.error(f"Error loading columns: {e}")
     
     def on_sub_table_changed(self):
         table = self.sub_table.currentText()
@@ -2052,8 +2052,8 @@ class SubqueryFilterDialog(QDialog):
         try:
             columns = self.db_manager.get_table_columns(table)
             self.sub_column.addItems([col['name'] for col in columns])
-        except:
-            pass
+        except Exception as e:
+            self.logger.error(f"Error loading columns: {e}")
     
     def apply_filter(self):
         try:
@@ -2082,3 +2082,188 @@ class SubqueryFilterDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка фильтра:\n{str(e)}")
             self.logger.error(f"Subquery filter error: {e}")
+
+
+class CustomTypesDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('CustomTypesDialog')
+        
+        from custom_types_manager import CustomTypesManager
+        self.types_manager = CustomTypesManager(db_manager)
+        
+        self.setWindowTitle("Пользовательские типы данных")
+        self.setModal(True)
+        self.resize(1000, 600)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+        """)
+        
+        title = QLabel("Управление пользовательскими типами")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        tabs = QTabWidget()
+        
+        view_tab = QWidget()
+        view_layout = QVBoxLayout(view_tab)
+        
+        btn_layout = QHBoxLayout()
+        load_btn = QPushButton("Загрузить типы")
+        load_btn.clicked.connect(self.load_types)
+        btn_layout.addWidget(load_btn)
+        btn_layout.addStretch()
+        view_layout.addLayout(btn_layout)
+        
+        self.types_table = QTableWidget()
+        self.types_table.setColumnCount(3)
+        self.types_table.setHorizontalHeaderLabels(['Имя', 'Тип', 'Поля'])
+        self.types_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.types_table.verticalHeader().setDefaultSectionSize(30)
+        view_layout.addWidget(self.types_table)
+        
+        tabs.addTab(view_tab, "Просмотр типов")
+        
+        create_tab = QWidget()
+        create_layout = QVBoxLayout(create_tab)
+        
+        form_layout = QGridLayout()
+        form_layout.addWidget(QLabel("Имя типа:"), 0, 0)
+        self.type_name_edit = QLineEdit()
+        form_layout.addWidget(self.type_name_edit, 0, 1)
+        
+        form_layout.addWidget(QLabel("Поля (имя:тип):"), 1, 0, Qt.AlignmentFlag.AlignTop)
+        self.fields_edit = QTextEdit()
+        self.fields_edit.setPlaceholderText("Введите поля в формате:\nимя1:тип1\nимя2:тип2")
+        self.fields_edit.setMaximumHeight(150)
+        form_layout.addWidget(self.fields_edit, 1, 1)
+        
+        create_btn = QPushButton("Создать тип")
+        create_btn.clicked.connect(self.create_type)
+        form_layout.addWidget(create_btn, 2, 1)
+        
+        create_layout.addLayout(form_layout)
+        create_layout.addStretch()
+        
+        tabs.addTab(create_tab, "Создание типа")
+        
+        delete_tab = QWidget()
+        delete_layout = QVBoxLayout(delete_tab)
+        
+        delete_layout.addWidget(QLabel("Выберите тип для удаления:"))
+        self.delete_type_combo = QComboBox()
+        delete_layout.addWidget(self.delete_type_combo)
+        
+        delete_btn = QPushButton("Удалить тип")
+        delete_btn.clicked.connect(self.delete_type)
+        delete_btn.setStyleSheet("background-color: #dc3545;")
+        delete_layout.addWidget(delete_btn)
+        delete_layout.addStretch()
+        
+        tabs.addTab(delete_tab, "Удаление типа")
+        
+        layout.addWidget(tabs)
+        
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        buttons_layout.addWidget(close_btn)
+        layout.addLayout(buttons_layout)
+        
+        self.load_types()
+    
+    def load_types(self):
+        try:
+            types = self.types_manager.get_all_types()
+            
+            self.types_table.setRowCount(len(types))
+            for row_idx, t in enumerate(types):
+                self.types_table.setItem(row_idx, 0, QTableWidgetItem(t['name']))
+                self.types_table.setItem(row_idx, 1, QTableWidgetItem(t['type']))
+                self.types_table.setItem(row_idx, 2, QTableWidgetItem(t['fields'] or ''))
+            
+            self.delete_type_combo.clear()
+            self.delete_type_combo.addItems([t['name'] for t in types])
+            
+            QMessageBox.information(self, "Успех", f"Загружено типов: {len(types)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить типы:\n{str(e)}")
+            self.logger.error(f"Load types error: {e}")
+    
+    def create_type(self):
+        try:
+            type_name = self.type_name_edit.text().strip()
+            fields_text = self.fields_edit.toPlainText().strip()
+            
+            if not type_name:
+                QMessageBox.warning(self, "Предупреждение", "Введите имя типа")
+                return
+            
+            if not fields_text:
+                QMessageBox.warning(self, "Предупреждение", "Введите поля типа")
+                return
+            
+            fields = []
+            for line in fields_text.split('\n'):
+                if ':' in line:
+                    name, ftype = line.split(':')
+                    fields.append({
+                        'name': name.strip(),
+                        'type': ftype.strip()
+                    })
+            
+            if not fields:
+                QMessageBox.warning(self, "Предупреждение", "Неверный формат полей")
+                return
+            
+            self.types_manager.create_composite_type(type_name, fields)
+            QMessageBox.information(self, "Успех", f"Тип {type_name} создан")
+            self.type_name_edit.clear()
+            self.fields_edit.clear()
+            self.load_types()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось создать тип:\n{str(e)}")
+            self.logger.error(f"Create type error: {e}")
+    
+    def delete_type(self):
+        try:
+            type_name = self.delete_type_combo.currentText()
+            
+            if not type_name:
+                QMessageBox.warning(self, "Предупреждение", "Выберите тип")
+                return
+            
+            reply = QMessageBox.question(
+                self,
+                "Подтверждение",
+                f"Удалить тип {type_name}?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.types_manager.drop_type(type_name)
+                QMessageBox.information(self, "Успех", f"Тип {type_name} удален")
+                self.load_types()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось удалить тип:\n{str(e)}")
+            self.logger.error(f"Delete type error: {e}")

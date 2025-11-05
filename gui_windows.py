@@ -2267,3 +2267,125 @@ class CustomTypesDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось удалить тип:\n{str(e)}")
             self.logger.error(f"Delete type error: {e}")
+
+
+class SimilarToDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('SimilarToDialog')
+        
+        self.setWindowTitle("Поиск SIMILAR TO")
+        self.setModal(True)
+        self.resize(1200, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #FF8C00;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #E67E00;
+            }
+        """)
+        
+        title = QLabel("Поиск по шаблону SIMILAR TO")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        filter_layout = QGridLayout()
+        
+        filter_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.table_combo.currentTextChanged.connect(self.on_table_changed)
+        filter_layout.addWidget(self.table_combo, 0, 1)
+        
+        filter_layout.addWidget(QLabel("Колонка:"), 0, 2)
+        self.column_combo = QComboBox()
+        filter_layout.addWidget(self.column_combo, 0, 3)
+        
+        filter_layout.addWidget(QLabel("Шаблон:"), 1, 0)
+        self.pattern_edit = QLineEdit()
+        self.pattern_edit.setPlaceholderText("Например: %ab% или _def%")
+        filter_layout.addWidget(self.pattern_edit, 1, 1, 1, 2)
+        
+        filter_layout.addWidget(QLabel("Оператор:"), 1, 3)
+        self.operator_combo = QComboBox()
+        self.operator_combo.addItems(['SIMILAR TO', 'NOT SIMILAR TO'])
+        filter_layout.addWidget(self.operator_combo, 1, 4)
+        
+        apply_btn = QPushButton("Поиск")
+        apply_btn.clicked.connect(self.apply_search)
+        filter_layout.addWidget(apply_btn, 2, 4)
+        
+        layout.addLayout(filter_layout)
+        
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(0)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.result_table.verticalHeader().setDefaultSectionSize(30)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel("SQL:")
+        self.sql_label.setStyleSheet("color: #666; font-size: 9pt;")
+        layout.addWidget(self.sql_label)
+        
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        buttons_layout.addWidget(close_btn)
+        layout.addLayout(buttons_layout)
+        
+        self.on_table_changed()
+    
+    def on_table_changed(self):
+        table = self.table_combo.currentText()
+        self.column_combo.clear()
+        try:
+            columns = self.db_manager.get_table_columns(table)
+            self.column_combo.addItems([col['name'] for col in columns])
+        except Exception as e:
+            self.logger.error(f"Error loading columns: {e}")
+    
+    def apply_search(self):
+        try:
+            table = self.table_combo.currentText()
+            column = self.column_combo.currentText()
+            pattern = self.pattern_edit.text().strip()
+            operator = self.operator_combo.currentText()
+            
+            if not pattern:
+                QMessageBox.warning(self, "Предупреждение", "Введите шаблон поиска")
+                return
+            
+            results, column_names = self.db_manager.execute_text_search(
+                table, column, pattern, operator
+            )
+            
+            sql = f"SELECT * FROM bank_system.{table} WHERE {column} {operator} '{pattern}'"
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка поиска:\n{str(e)}")
+            self.logger.error(f"SIMILAR TO search error: {e}")

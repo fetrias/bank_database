@@ -526,6 +526,12 @@ class DatabaseManager:
         elif search_type == "!~*":
             query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} !~* %s"
             params = (search_pattern,)
+        elif search_type == "SIMILAR TO":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} SIMILAR TO %s"
+            params = (search_pattern,)
+        elif search_type == "NOT SIMILAR TO":
+            query = f"SELECT * FROM bank_system.{table_name} WHERE {column_name} NOT SIMILAR TO %s"
+            params = (search_pattern,)
         else:
             raise ValueError(f"Неподдерживаемый тип поиска: {search_type}")
         

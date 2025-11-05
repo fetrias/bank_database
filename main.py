@@ -10,7 +10,7 @@ from db_manager import DatabaseManager
 from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
                          StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog,
-                         CustomTypesDialog)
+                         CustomTypesDialog, SimilarToDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -132,6 +132,24 @@ class BankSystemApp(QMainWindow):
             }
         """
 
+        advanced_style_3 = """
+            QPushButton {
+                background-color: #FF8C00;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #E67E00;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """
+
         self.btn_alter_table = QPushButton("ALTER TABLE - Изменить структуру БД")
         self.btn_alter_table.setMinimumHeight(40)
         self.btn_alter_table.setEnabled(False)
@@ -152,6 +170,13 @@ class BankSystemApp(QMainWindow):
         self.btn_text_search.setStyleSheet(advanced_style)
         self.btn_text_search.clicked.connect(self.show_text_search_dialog)
         buttons_layout.addWidget(self.btn_text_search)
+
+        self.btn_similar_to = QPushButton("Поиск SIMILAR TO")
+        self.btn_similar_to.setMinimumHeight(40)
+        self.btn_similar_to.setEnabled(False)
+        self.btn_similar_to.setStyleSheet(advanced_style_3)
+        self.btn_similar_to.clicked.connect(self.show_similar_to_dialog)
+        buttons_layout.addWidget(self.btn_similar_to)
 
         self.btn_string_functions = QPushButton("Функции работы со строками")
         self.btn_string_functions.setMinimumHeight(40)
@@ -269,6 +294,7 @@ class BankSystemApp(QMainWindow):
             self.btn_alter_table.setEnabled(True)
             self.btn_advanced_select.setEnabled(True)
             self.btn_text_search.setEnabled(True)
+            self.btn_similar_to.setEnabled(True)
             self.btn_string_functions.setEnabled(True)
             self.btn_join_wizard.setEnabled(True)
             self.btn_subquery_filter.setEnabled(True)
@@ -394,6 +420,15 @@ class BankSystemApp(QMainWindow):
         dialog = TextSearchDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыто окно поиска по тексту")
+
+    def show_similar_to_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = SimilarToDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно поиска SIMILAR TO")
 
     def show_string_functions_dialog(self):
         if not self.is_connected:

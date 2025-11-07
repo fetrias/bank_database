@@ -10,7 +10,7 @@ from db_manager import DatabaseManager
 from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
                          StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog,
-                         CustomTypesDialog, SimilarToDialog)
+                         CustomTypesDialog, SimilarToDialog, AggregationDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -206,6 +206,13 @@ class BankSystemApp(QMainWindow):
         self.btn_similar_to.clicked.connect(self.show_similar_to_dialog)
         buttons_layout.addWidget(self.btn_similar_to)
 
+        self.btn_aggregation = QPushButton("Агрегирование и группировка")
+        self.btn_aggregation.setMinimumHeight(40)
+        self.btn_aggregation.setEnabled(False)
+        self.btn_aggregation.setStyleSheet(advanced_style_3)
+        self.btn_aggregation.clicked.connect(self.show_aggregation_dialog)
+        buttons_layout.addWidget(self.btn_aggregation)
+
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)
         self.btn_reconnect.setStyleSheet("""
@@ -299,6 +306,7 @@ class BankSystemApp(QMainWindow):
             self.btn_join_wizard.setEnabled(True)
             self.btn_subquery_filter.setEnabled(True)
             self.btn_custom_types.setEnabled(True)
+            self.btn_aggregation.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -429,6 +437,15 @@ class BankSystemApp(QMainWindow):
         dialog = SimilarToDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыто окно поиска SIMILAR TO")
+
+    def show_aggregation_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = AggregationDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно агрегирования")
 
     def show_string_functions_dialog(self):
         if not self.is_connected:

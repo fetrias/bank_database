@@ -2396,3 +2396,144 @@ class SimilarToDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка поиска:\n{str(e)}")
             self.logger.error(f"SIMILAR TO search error: {e}")
+
+
+class AggregationDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('AggregationDialog')
+        
+        self.setWindowTitle("Агрегирование и группировка")
+        self.setModal(True)
+        self.resize(1200, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #FF8C00;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #E67E00;
+            }
+        """)
+        
+        title = QLabel("Агрегирование и группировка данных")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        filter_layout = QGridLayout()
+        
+        filter_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.table_combo.currentTextChanged.connect(self.on_table_changed)
+        filter_layout.addWidget(self.table_combo, 0, 1)
+        
+        filter_layout.addWidget(QLabel("Агрегатная функция:"), 0, 2)
+        self.agg_func_combo = QComboBox()
+        self.agg_func_combo.addItems(['COUNT', 'SUM', 'AVG', 'MIN', 'MAX'])
+        filter_layout.addWidget(self.agg_func_combo, 0, 3)
+        
+        filter_layout.addWidget(QLabel("Колонка для агрегации:"), 1, 0)
+        self.agg_column_combo = QComboBox()
+        filter_layout.addWidget(self.agg_column_combo, 1, 1)
+        
+        filter_layout.addWidget(QLabel("GROUP BY колонка:"), 1, 2)
+        self.group_combo = QComboBox()
+        self.group_combo.addItem("(нет)")
+        filter_layout.addWidget(self.group_combo, 1, 3)
+        
+        filter_layout.addWidget(QLabel("HAVING условие:"), 2, 0)
+        self.having_edit = QLineEdit()
+        self.having_edit.setPlaceholderText("Например: COUNT(*) > 5")
+        filter_layout.addWidget(self.having_edit, 2, 1, 1, 3)
+        
+        apply_btn = QPushButton("Выполнить")
+        apply_btn.clicked.connect(self.apply_aggregation)
+        filter_layout.addWidget(apply_btn, 3, 3)
+        
+        layout.addLayout(filter_layout)
+        
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(0)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.result_table.verticalHeader().setDefaultSectionSize(30)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel("SQL:")
+        self.sql_label.setStyleSheet("color: #666; font-size: 9pt;")
+        layout.addWidget(self.sql_label)
+        
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        buttons_layout.addWidget(close_btn)
+        layout.addLayout(buttons_layout)
+        
+        self.on_table_changed()
+    
+    def on_table_changed(self):
+        table = self.table_combo.currentText()
+        self.agg_column_combo.clear()
+        self.group_combo.clear()
+        self.group_combo.addItem("(нет)")
+        try:
+            columns = self.db_manager.get_table_columns(table)
+            col_names = [col['name'] for col in columns]
+            self.agg_column_combo.addItems(col_names)
+            self.group_combo.addItems(col_names)
+        except Exception as e:
+            self.logger.error(f"Error loading columns: {e}")
+    
+    def apply_aggregation(self):
+        try:
+            table = self.table_combo.currentText()
+            agg_func = self.agg_func_combo.currentText()
+            agg_column = self.agg_column_combo.currentText()
+            group_by = self.group_combo.currentText()
+            having = self.having_edit.text().strip()
+            
+            if group_by == "(нет)":
+                group_by = None
+            if not having:
+                having = None
+            
+            results, column_names = self.db_manager.execute_aggregation(
+                table, agg_func, agg_column, group_by, having
+            )
+            
+            sql = f"SELECT {agg_func}({agg_column})"
+            if group_by:
+                sql += f", {group_by}"
+            sql += f" FROM bank_system.{table}"
+            if group_by:
+                sql += f" GROUP BY {group_by}"
+            if having:
+                sql += f" HAVING {having}"
+            
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка агрегирования:\n{str(e)}")
+            self.logger.error(f"Aggregation error: {e}")

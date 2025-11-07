@@ -665,3 +665,29 @@ class DatabaseManager:
             self.connection.rollback()
             self.logger.error(f"Subquery filter error: {e}")
             raise
+    
+    def execute_aggregation(self, table: str, agg_func: str, agg_column: str,
+                           group_by_column: str = None, having: str = None) -> Tuple[List[Tuple], List[str]]:
+        try:
+            query = f"SELECT {agg_func}({agg_column})"
+            if group_by_column:
+                query += f", {group_by_column}"
+            query += f" FROM bank_system.{table}"
+            if group_by_column:
+                query += f" GROUP BY {group_by_column}"
+            if having:
+                query += f" HAVING {having}"
+            
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(query)
+                results = cursor.fetchall()
+                column_names = [desc[0] for desc in cursor.description]
+                self.connection.commit()
+                return results, column_names
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Aggregation error: {e}")
+            raise

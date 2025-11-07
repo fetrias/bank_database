@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QComboBox, QMessageBox, QTabWidget, QWidget,
                                QTableWidget, QTableWidgetItem, QHeaderView,
                                QGroupBox, QScrollArea)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from typing import Callable
 import logging
 
@@ -2036,6 +2036,7 @@ class SubqueryFilterDialog(QDialog):
         layout.addLayout(buttons_layout)
         
         self.on_main_table_changed()
+        self.on_sub_table_changed()
     
     def on_main_table_changed(self):
         table = self.main_table.currentText()
@@ -2349,6 +2350,12 @@ class SimilarToDialog(QDialog):
         layout.addLayout(buttons_layout)
         
         self.on_table_changed()
+        
+        # Установка данных по умолчанию
+        self.table_combo.setCurrentText('clients')
+        self.on_table_changed()
+        self.column_combo.setCurrentText('full_name')
+        self.pattern_edit.setText('%ов%')
     
     def on_table_changed(self):
         table = self.table_combo.currentText()

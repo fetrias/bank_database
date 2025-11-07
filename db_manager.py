@@ -503,6 +503,10 @@ class DatabaseManager:
             results = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]
             return results, column_names
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            self.logger.error(f"Advanced select error: {e}")
+            raise ValueError(f"Ошибка запроса: {e}")
         finally:
             cursor.close()
     
@@ -541,6 +545,10 @@ class DatabaseManager:
             results = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]
             return results, column_names
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            self.logger.error(f"Search error: {e}")
+            raise ValueError(f"Ошибка поиска: {e}")
         finally:
             cursor.close()
     
@@ -587,6 +595,10 @@ class DatabaseManager:
             results = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]
             return results, column_names
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            self.logger.error(f"String function error: {e}")
+            raise ValueError(f"Ошибка функции: {e}")
         finally:
             cursor.close()
     
@@ -607,6 +619,10 @@ class DatabaseManager:
             results = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]
             return results, column_names
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            self.logger.error(f"Join error: {e}")
+            raise ValueError(f"Ошибка соединения: {e}")
         finally:
             cursor.close()
     

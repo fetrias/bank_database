@@ -2537,3 +2537,166 @@ class AggregationDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка агрегирования:\n{str(e)}")
             self.logger.error(f"Aggregation error: {e}")
+
+
+class CaseConstructorDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('CaseConstructorDialog')
+        self.when_then_pairs = []
+        
+        self.setWindowTitle("Конструктор CASE выражений")
+        self.setModal(True)
+        self.resize(1200, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #FF8C00;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #E67E00;
+            }
+        """)
+        
+        title = QLabel("Конструктор CASE выражений")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        filter_layout = QGridLayout()
+        
+        filter_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.table_combo.currentTextChanged.connect(self.on_table_changed)
+        filter_layout.addWidget(self.table_combo, 0, 1)
+        
+        filter_layout.addWidget(QLabel("Выбрать столбцы:"), 0, 2)
+        self.select_edit = QLineEdit()
+        self.select_edit.setText("*")
+        self.select_edit.setPlaceholderText("*, col1, col2")
+        filter_layout.addWidget(self.select_edit, 0, 3)
+        
+        filter_layout.addWidget(QLabel("WHEN условие:"), 1, 0)
+        self.when_edit = QLineEdit()
+        self.when_edit.setPlaceholderText("balance > 1000")
+        self.when_edit.setText("amount > 100")
+        filter_layout.addWidget(self.when_edit, 1, 1)
+        
+        filter_layout.addWidget(QLabel("THEN результат:"), 1, 2)
+        self.then_edit = QLineEdit()
+        self.then_edit.setPlaceholderText("'Высокий баланс'")
+        self.then_edit.setText("'Большая сумма'")
+        filter_layout.addWidget(self.then_edit, 1, 3)
+        
+        add_btn = QPushButton("Добавить WHEN/THEN")
+        add_btn.clicked.connect(self.add_when_then)
+        filter_layout.addWidget(add_btn, 2, 0)
+        
+        filter_layout.addWidget(QLabel("ELSE результат:"), 2, 1, 1, 2)
+        self.else_edit = QLineEdit()
+        self.else_edit.setText("'Низкий'")
+        self.else_edit.setPlaceholderText("'Низкий баланс'")
+        filter_layout.addWidget(self.else_edit, 2, 3)
+        
+        layout.addLayout(filter_layout)
+        
+        self.conditions_label = QLabel("Добавленные условия: нет")
+        self.conditions_label.setStyleSheet("background-color: #f0f0f0; padding: 5px;")
+        layout.addWidget(self.conditions_label)
+        
+        execute_btn = QPushButton("Выполнить CASE выражение")
+        execute_btn.clicked.connect(self.execute_case)
+        layout.addWidget(execute_btn)
+        
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(0)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.result_table.verticalHeader().setDefaultSectionSize(30)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel("SQL:")
+        self.sql_label.setStyleSheet("color: #666; font-size: 9pt;")
+        layout.addWidget(self.sql_label)
+        
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        buttons_layout.addWidget(close_btn)
+        layout.addLayout(buttons_layout)
+        
+        # Установка таблицы по умолчанию
+        self.table_combo.setCurrentText('transactions')
+    
+    def on_table_changed(self):
+        pass
+    
+    def add_when_then(self):
+        when = self.when_edit.text().strip()
+        then = self.then_edit.text().strip()
+        
+        if not when or not then:
+            QMessageBox.warning(self, "Ошибка", "Заполните оба поля WHEN и THEN")
+            return
+        
+        self.when_then_pairs.append((when, then))
+        self.update_conditions_label()
+        self.when_edit.clear()
+        self.then_edit.clear()
+    
+    def update_conditions_label(self):
+        if not self.when_then_pairs:
+            self.conditions_label.setText("Добавленные условия: нет")
+        else:
+            text = "Добавленные условия:\n"
+            for i, (when, then) in enumerate(self.when_then_pairs, 1):
+                text += f"{i}. WHEN {when} THEN {then}\n"
+            self.conditions_label.setText(text)
+    
+    def execute_case(self):
+        try:
+            if not self.when_then_pairs:
+                QMessageBox.warning(self, "Ошибка", "Добавьте хотя бы одно условие WHEN/THEN")
+                return
+            
+            table = self.table_combo.currentText()
+            select_cols = self.select_edit.text().strip()
+            else_result = self.else_edit.text().strip()
+            
+            case_expr = "CASE"
+            for when, then in self.when_then_pairs:
+                case_expr += f" WHEN {when} THEN {then}"
+            case_expr += f" ELSE {else_result} END"
+            
+            results, column_names = self.db_manager.execute_case_expression(
+                table, case_expr, select_cols
+            )
+            
+            sql = f"SELECT {select_cols}, {case_expr} as case_result FROM bank_system.{table}"
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка выполнения CASE:\n{str(e)}")
+            self.logger.error(f"CASE error: {e}")
+            self.logger.error(f"Aggregation error: {e}")

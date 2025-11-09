@@ -10,7 +10,8 @@ from db_manager import DatabaseManager
 from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
                          StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog,
-                         CustomTypesDialog, SimilarToDialog, AggregationDialog)
+                         CustomTypesDialog, SimilarToDialog, AggregationDialog,
+                         CaseConstructorDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -213,6 +214,13 @@ class BankSystemApp(QMainWindow):
         self.btn_aggregation.clicked.connect(self.show_aggregation_dialog)
         buttons_layout.addWidget(self.btn_aggregation)
 
+        self.btn_case_constructor = QPushButton("Конструктор CASE")
+        self.btn_case_constructor.setMinimumHeight(40)
+        self.btn_case_constructor.setEnabled(False)
+        self.btn_case_constructor.setStyleSheet(advanced_style_3)
+        self.btn_case_constructor.clicked.connect(self.show_case_constructor_dialog)
+        buttons_layout.addWidget(self.btn_case_constructor)
+
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)
         self.btn_reconnect.setStyleSheet("""
@@ -307,6 +315,7 @@ class BankSystemApp(QMainWindow):
             self.btn_subquery_filter.setEnabled(True)
             self.btn_custom_types.setEnabled(True)
             self.btn_aggregation.setEnabled(True)
+            self.btn_case_constructor.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -446,6 +455,15 @@ class BankSystemApp(QMainWindow):
         dialog = AggregationDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыто окно агрегирования")
+
+    def show_case_constructor_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = CaseConstructorDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно конструктора CASE")
 
     def show_string_functions_dialog(self):
         if not self.is_connected:

@@ -691,3 +691,23 @@ class DatabaseManager:
             self.connection.rollback()
             self.logger.error(f"Aggregation error: {e}")
             raise
+    
+    def execute_case_expression(self, table: str, case_expr: str, 
+                               select_cols: str = "*") -> Tuple[List[Tuple], List[str]]:
+        try:
+            query = f"SELECT {select_cols}, {case_expr} as case_result FROM bank_system.{table}"
+            
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(query)
+                results = cursor.fetchall()
+                column_names = [desc[0] for desc in cursor.description]
+                self.connection.commit()
+                return results, column_names
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"CASE expression error: {e}")
+            raise
+            raise

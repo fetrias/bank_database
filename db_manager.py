@@ -710,4 +710,33 @@ class DatabaseManager:
             self.connection.rollback()
             self.logger.error(f"CASE expression error: {e}")
             raise
+    
+    def execute_coalesce_nullif(self, table: str, func_type: str, column: str,
+                               coalesce_values: list = None, nullif_val1: str = None,
+                               nullif_val2: str = None, select_cols: str = "*") -> Tuple[List[Tuple], List[str]]:
+        try:
+            if func_type == "COALESCE":
+                if not coalesce_values:
+                    coalesce_values = ["NULL", "'default'"]
+                values_str = ", ".join(coalesce_values)
+                expr = f"COALESCE({column}, {values_str})"
+            elif func_type == "NULLIF":
+                expr = f"NULLIF({column}, {nullif_val1})"
+            else:
+                raise ValueError(f"Unknown function: {func_type}")
+            
+            query = f"SELECT {select_cols}, {expr} as result FROM bank_system.{table}"
+            
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(query)
+                results = cursor.fetchall()
+                column_names = [desc[0] for desc in cursor.description]
+                self.connection.commit()
+                return results, column_names
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"NULL function error: {e}")
             raise

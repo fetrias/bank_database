@@ -11,7 +11,7 @@ from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
                          StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog,
                          CustomTypesDialog, SimilarToDialog, AggregationDialog,
-                         CaseConstructorDialog)
+                         CaseConstructorDialog, NullFunctionsDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -221,6 +221,13 @@ class BankSystemApp(QMainWindow):
         self.btn_case_constructor.clicked.connect(self.show_case_constructor_dialog)
         buttons_layout.addWidget(self.btn_case_constructor)
 
+        self.btn_null_functions = QPushButton("COALESCE и NULLIF")
+        self.btn_null_functions.setMinimumHeight(40)
+        self.btn_null_functions.setEnabled(False)
+        self.btn_null_functions.setStyleSheet(advanced_style_3)
+        self.btn_null_functions.clicked.connect(self.show_null_functions_dialog)
+        buttons_layout.addWidget(self.btn_null_functions)
+
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)
         self.btn_reconnect.setStyleSheet("""
@@ -316,6 +323,7 @@ class BankSystemApp(QMainWindow):
             self.btn_custom_types.setEnabled(True)
             self.btn_aggregation.setEnabled(True)
             self.btn_case_constructor.setEnabled(True)
+            self.btn_null_functions.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -464,6 +472,15 @@ class BankSystemApp(QMainWindow):
         dialog = CaseConstructorDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыто окно конструктора CASE")
+
+    def show_null_functions_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = NullFunctionsDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно работы с NULL функциями")
 
     def show_string_functions_dialog(self):
         if not self.is_connected:

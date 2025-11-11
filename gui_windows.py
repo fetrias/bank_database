@@ -2699,4 +2699,148 @@ class CaseConstructorDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка выполнения CASE:\n{str(e)}")
             self.logger.error(f"CASE error: {e}")
+
+
+class NullFunctionsDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('NullFunctionsDialog')
+        
+        self.setWindowTitle("COALESCE и NULLIF функции")
+        self.setModal(True)
+        self.resize(1200, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #FF8C00;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #E67E00;
+            }
+        """)
+        
+        title = QLabel("COALESCE и NULLIF - работа с NULL значениями")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        filter_layout = QGridLayout()
+        
+        filter_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.table_combo.currentTextChanged.connect(self.on_table_changed)
+        filter_layout.addWidget(self.table_combo, 0, 1)
+        
+        filter_layout.addWidget(QLabel("Функция:"), 0, 2)
+        self.func_combo = QComboBox()
+        self.func_combo.addItems(['COALESCE', 'NULLIF'])
+        self.func_combo.currentTextChanged.connect(self.update_params)
+        filter_layout.addWidget(self.func_combo, 0, 3)
+        
+        filter_layout.addWidget(QLabel("Колонка:"), 1, 0)
+        self.column_combo = QComboBox()
+        filter_layout.addWidget(self.column_combo, 1, 1)
+        
+        self.param_label = QLabel("Альтернативное значение:")
+        filter_layout.addWidget(self.param_label, 1, 2)
+        self.param_edit = QLineEdit()
+        self.param_edit.setText("0")
+        self.param_edit.setPlaceholderText("'default' или 0")
+        filter_layout.addWidget(self.param_edit, 1, 3)
+        
+        filter_layout.addWidget(QLabel("SELECT столбцы:"), 2, 0)
+        self.select_edit = QLineEdit()
+        self.select_edit.setText("*")
+        filter_layout.addWidget(self.select_edit, 2, 1, 1, 3)
+        
+        execute_btn = QPushButton("Выполнить")
+        execute_btn.clicked.connect(self.execute_function)
+        filter_layout.addWidget(execute_btn, 3, 3)
+        
+        layout.addLayout(filter_layout)
+        
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(0)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.result_table.verticalHeader().setDefaultSectionSize(30)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel("SQL:")
+        self.sql_label.setStyleSheet("color: #666; font-size: 9pt;")
+        layout.addWidget(self.sql_label)
+        
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        buttons_layout.addWidget(close_btn)
+        layout.addLayout(buttons_layout)
+        
+        self.on_table_changed()
+        self.table_combo.setCurrentText('transactions')
+    
+    def on_table_changed(self):
+        table = self.table_combo.currentText()
+        self.column_combo.clear()
+        try:
+            columns = self.db_manager.get_table_columns(table)
+            self.column_combo.addItems([col['name'] for col in columns])
+        except Exception as e:
+            self.logger.error(f"Error loading columns: {e}")
+    
+    def update_params(self):
+        func = self.func_combo.currentText()
+        if func == "COALESCE":
+            self.param_label.setText("Альтернативное значение:")
+            self.param_edit.setPlaceholderText("'default' или 0")
+        else:
+            self.param_label.setText("Значение для замены на NULL:")
+            self.param_edit.setPlaceholderText("Значение для NULLIF")
+    
+    def execute_function(self):
+        try:
+            table = self.table_combo.currentText()
+            func_type = self.func_combo.currentText()
+            column = self.column_combo.currentText()
+            param = self.param_edit.text().strip()
+            select_cols = self.select_edit.text().strip()
+            
+            if func_type == "COALESCE":
+                results, column_names = self.db_manager.execute_coalesce_nullif(
+                    table, func_type, column, coalesce_values=[column, param], select_cols=select_cols
+                )
+                expr = f"COALESCE({column}, {param})"
+            else:
+                results, column_names = self.db_manager.execute_coalesce_nullif(
+                    table, func_type, column, nullif_val1=param, select_cols=select_cols
+                )
+                expr = f"NULLIF({column}, {param})"
+            
+            sql = f"SELECT {select_cols}, {expr} as result FROM bank_system.{table}"
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка выполнения:\n{str(e)}")
+            self.logger.error(f"NULL function error: {e}")
             self.logger.error(f"Aggregation error: {e}")

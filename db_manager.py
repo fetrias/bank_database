@@ -740,3 +740,41 @@ class DatabaseManager:
             self.connection.rollback()
             self.logger.error(f"NULL function error: {e}")
             raise
+    
+    def execute_advanced_grouping(self, table: str, select_cols: str, group_type: str,
+                                 group_cols: list, where: str = None, 
+                                 having: str = None, order: str = None) -> Tuple[List[Tuple], List[str]]:
+        try:
+            query = f"SELECT {select_cols} FROM bank_system.{table}"
+            
+            if where:
+                query += f" WHERE {where}"
+            
+            group_clause = ", ".join(group_cols)
+            if group_type == "ROLLUP":
+                query += f" GROUP BY ROLLUP({group_clause})"
+            elif group_type == "CUBE":
+                query += f" GROUP BY CUBE({group_clause})"
+            elif group_type == "GROUPING_SETS":
+                query += f" GROUP BY GROUPING SETS (({group_clause}))"
+            else:
+                query += f" GROUP BY {group_clause}"
+            
+            if having:
+                query += f" HAVING {having}"
+            if order:
+                query += f" ORDER BY {order}"
+            
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(query)
+                results = cursor.fetchall()
+                column_names = [desc[0] for desc in cursor.description]
+                self.connection.commit()
+                return results, column_names
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Advanced grouping error: {e}")
+            raise

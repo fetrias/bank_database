@@ -11,7 +11,7 @@ from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
                          StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog,
                          CustomTypesDialog, SimilarToDialog, AggregationDialog,
-                         CaseConstructorDialog, NullFunctionsDialog)
+                         CaseConstructorDialog, NullFunctionsDialog, AdvancedGroupingDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -242,6 +242,38 @@ class BankSystemApp(QMainWindow):
         new_group.setLayout(new_group_layout)
         buttons_layout.addWidget(new_group)
 
+        # Группа "Четвертое задание (синие)"
+        fourth_group = QGroupBox("Четвертое задание")
+        fourth_group_layout = QHBoxLayout()
+
+        advanced_style_4 = """
+            QPushButton {
+                background-color: #0066cc;
+                color: white;
+                font-weight: bold;
+                padding: 8px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #0052a3;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """
+
+        self.btn_advanced_grouping = QPushButton("Группировка")
+        self.btn_advanced_grouping.setMinimumHeight(40)
+        self.btn_advanced_grouping.setEnabled(False)
+        self.btn_advanced_grouping.setStyleSheet(advanced_style_4)
+        self.btn_advanced_grouping.clicked.connect(self.show_advanced_grouping_dialog)
+        fourth_group_layout.addWidget(self.btn_advanced_grouping)
+
+        fourth_group.setLayout(fourth_group_layout)
+        buttons_layout.addWidget(fourth_group)
+
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)
         self.btn_reconnect.setStyleSheet("""
@@ -338,6 +370,7 @@ class BankSystemApp(QMainWindow):
             self.btn_aggregation.setEnabled(True)
             self.btn_case_constructor.setEnabled(True)
             self.btn_null_functions.setEnabled(True)
+            self.btn_advanced_grouping.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -531,6 +564,15 @@ class BankSystemApp(QMainWindow):
         dialog = CustomTypesDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыто окно управления типами данных")
+
+    def show_advanced_grouping_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = AdvancedGroupingDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно расширенной группировки данных")
 
     def add_log(self, message: str):
         self.log_text.append(f"• {message}")

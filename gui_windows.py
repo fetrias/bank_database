@@ -1470,11 +1470,11 @@ class AdvancedSelectDialog(QDialog):
             if order:
                 sql += f" ORDER BY {order}"
             
-            self.sql_label.setText(f"SQL: {sql}")
-            
             results, column_names = self.db_manager.execute_advanced_select(
                 table, columns, where, order, group, having
             )
+            
+            self.sql_label.setText(f"SQL: {sql}")
             
             self.result_table.setRowCount(len(results))
             self.result_table.setColumnCount(len(column_names))
@@ -2844,3 +2844,139 @@ class NullFunctionsDialog(QDialog):
             QMessageBox.critical(self, "Ошибка", f"Ошибка выполнения:\n{str(e)}")
             self.logger.error(f"NULL function error: {e}")
             self.logger.error(f"Aggregation error: {e}")
+
+
+class AdvancedGroupingDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('AdvancedGroupingDialog')
+        
+        self.setWindowTitle("Расширенная группировка данных")
+        self.setModal(True)
+        self.resize(1200, 700)
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #17A2B8;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+        """)
+        
+        title = QLabel("Расширенная группировка (ROLLUP, CUBE, GROUPING SETS)")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        filter_layout = QGridLayout()
+        
+        filter_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.table_combo.currentTextChanged.connect(self.on_table_changed)
+        filter_layout.addWidget(self.table_combo, 0, 1)
+        
+        filter_layout.addWidget(QLabel("SELECT:"), 0, 2)
+        self.select_edit = QLineEdit()
+        self.select_edit.setText("*")
+        filter_layout.addWidget(self.select_edit, 0, 3)
+        
+        filter_layout.addWidget(QLabel("Тип группировки:"), 1, 0)
+        self.group_type_combo = QComboBox()
+        self.group_type_combo.addItems(['ROLLUP', 'CUBE', 'GROUPING_SETS'])
+        filter_layout.addWidget(self.group_type_combo, 1, 1)
+        
+        filter_layout.addWidget(QLabel("GROUP BY колонки:"), 1, 2)
+        self.group_cols_edit = QLineEdit()
+        self.group_cols_edit.setPlaceholderText("col1, col2, col3")
+        self.group_cols_edit.setText("currency_code")
+        filter_layout.addWidget(self.group_cols_edit, 1, 3)
+        
+        filter_layout.addWidget(QLabel("WHERE условие:"), 2, 0)
+        self.where_edit = QLineEdit()
+        self.where_edit.setPlaceholderText("amount > 100")
+        filter_layout.addWidget(self.where_edit, 2, 1, 1, 3)
+        
+        filter_layout.addWidget(QLabel("ORDER BY:"), 3, 0)
+        self.order_edit = QLineEdit()
+        self.order_edit.setPlaceholderText("1, 2")
+        filter_layout.addWidget(self.order_edit, 3, 1, 1, 3)
+        
+        execute_btn = QPushButton("Выполнить группировку")
+        execute_btn.clicked.connect(self.execute_grouping)
+        filter_layout.addWidget(execute_btn, 4, 3)
+        
+        layout.addLayout(filter_layout)
+        
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(0)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.result_table.verticalHeader().setDefaultSectionSize(30)
+        layout.addWidget(self.result_table)
+        
+        self.sql_label = QLabel("SQL:")
+        self.sql_label.setStyleSheet("color: #666; font-size: 9pt;")
+        layout.addWidget(self.sql_label)
+        
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        buttons_layout.addWidget(close_btn)
+        layout.addLayout(buttons_layout)
+    
+    def on_table_changed(self):
+        pass
+    
+    def execute_grouping(self):
+        try:
+            table = self.table_combo.currentText()
+            select_cols = self.select_edit.text().strip()
+            group_type = self.group_type_combo.currentText()
+            group_cols_str = self.group_cols_edit.text().strip()
+            where = self.where_edit.text().strip()
+            order = self.order_edit.text().strip()
+            
+            if not group_cols_str:
+                QMessageBox.warning(self, "Ошибка", "Укажите колонки для GROUP BY")
+                return
+            
+            group_cols = [c.strip() for c in group_cols_str.split(',')]
+            
+            results, column_names = self.db_manager.execute_advanced_grouping(
+                table, select_cols, group_type, group_cols, where or None, order=order or None
+            )
+            
+            sql = f"SELECT {select_cols} FROM bank_system.{table}"
+            if where:
+                sql += f" WHERE {where}"
+            sql += f" GROUP BY {group_type}({group_cols_str})"
+            if order:
+                sql += f" ORDER BY {order}"
+            
+            self.sql_label.setText(f"SQL: {sql}")
+            
+            self.result_table.setRowCount(len(results))
+            self.result_table.setColumnCount(len(column_names))
+            self.result_table.setHorizontalHeaderLabels(column_names)
+            
+            for row_idx, row_data in enumerate(results):
+                for col_idx, value in enumerate(row_data):
+                    self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+            
+            QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка группировки:\n{str(e)}")
+            self.logger.error(f"Advanced grouping error: {e}")

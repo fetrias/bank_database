@@ -115,12 +115,16 @@ class BankSystemApp(QMainWindow):
         self.btn_view_data.clicked.connect(self.show_view_dialog)
         buttons_layout.addWidget(self.btn_view_data)
 
+        # Группа "Расширенные функции (фиолетовые)"
+        advanced_group = QGroupBox("Расширенные функции")
+        advanced_group_layout = QHBoxLayout()
+
         advanced_style = """
             QPushButton {
                 background-color: #6610f2;
                 color: white;
                 font-weight: bold;
-                padding: 10px;
+                padding: 8px;
                 border: none;
                 border-radius: 5px;
             }
@@ -133,12 +137,54 @@ class BankSystemApp(QMainWindow):
             }
         """
 
+        self.btn_alter_table = QPushButton("ALTER TABLE")
+        self.btn_alter_table.setMinimumHeight(40)
+        self.btn_alter_table.setEnabled(False)
+        self.btn_alter_table.setStyleSheet(advanced_style)
+        self.btn_alter_table.clicked.connect(self.show_alter_table_dialog)
+        advanced_group_layout.addWidget(self.btn_alter_table)
+
+        self.btn_advanced_select = QPushButton("SELECT")
+        self.btn_advanced_select.setMinimumHeight(40)
+        self.btn_advanced_select.setEnabled(False)
+        self.btn_advanced_select.setStyleSheet(advanced_style)
+        self.btn_advanced_select.clicked.connect(self.show_advanced_select_dialog)
+        advanced_group_layout.addWidget(self.btn_advanced_select)
+
+        self.btn_text_search = QPushButton("Поиск текста")
+        self.btn_text_search.setMinimumHeight(40)
+        self.btn_text_search.setEnabled(False)
+        self.btn_text_search.setStyleSheet(advanced_style)
+        self.btn_text_search.clicked.connect(self.show_text_search_dialog)
+        advanced_group_layout.addWidget(self.btn_text_search)
+
+        self.btn_string_functions = QPushButton("Строки")
+        self.btn_string_functions.setMinimumHeight(40)
+        self.btn_string_functions.setEnabled(False)
+        self.btn_string_functions.setStyleSheet(advanced_style)
+        self.btn_string_functions.clicked.connect(self.show_string_functions_dialog)
+        advanced_group_layout.addWidget(self.btn_string_functions)
+
+        self.btn_join_wizard = QPushButton("JOIN")
+        self.btn_join_wizard.setMinimumHeight(40)
+        self.btn_join_wizard.setEnabled(False)
+        self.btn_join_wizard.setStyleSheet(advanced_style)
+        self.btn_join_wizard.clicked.connect(self.show_join_wizard_dialog)
+        advanced_group_layout.addWidget(self.btn_join_wizard)
+
+        advanced_group.setLayout(advanced_group_layout)
+        buttons_layout.addWidget(advanced_group)
+
+        # Группа "Новые функции (оранжевые)"
+        new_group = QGroupBox("Новые функции")
+        new_group_layout = QHBoxLayout()
+
         advanced_style_3 = """
             QPushButton {
                 background-color: #FF8C00;
                 color: white;
                 font-weight: bold;
-                padding: 10px;
+                padding: 8px;
                 border: none;
                 border-radius: 5px;
             }
@@ -151,82 +197,50 @@ class BankSystemApp(QMainWindow):
             }
         """
 
-        self.btn_alter_table = QPushButton("ALTER TABLE - Изменить структуру БД")
-        self.btn_alter_table.setMinimumHeight(40)
-        self.btn_alter_table.setEnabled(False)
-        self.btn_alter_table.setStyleSheet(advanced_style)
-        self.btn_alter_table.clicked.connect(self.show_alter_table_dialog)
-        buttons_layout.addWidget(self.btn_alter_table)
-
-        self.btn_advanced_select = QPushButton("Расширенный SELECT")
-        self.btn_advanced_select.setMinimumHeight(40)
-        self.btn_advanced_select.setEnabled(False)
-        self.btn_advanced_select.setStyleSheet(advanced_style)
-        self.btn_advanced_select.clicked.connect(self.show_advanced_select_dialog)
-        buttons_layout.addWidget(self.btn_advanced_select)
-
-        self.btn_text_search = QPushButton("Поиск по тексту (LIKE / REGEX)")
-        self.btn_text_search.setMinimumHeight(40)
-        self.btn_text_search.setEnabled(False)
-        self.btn_text_search.setStyleSheet(advanced_style)
-        self.btn_text_search.clicked.connect(self.show_text_search_dialog)
-        buttons_layout.addWidget(self.btn_text_search)
-
-        self.btn_string_functions = QPushButton("Функции работы со строками")
-        self.btn_string_functions.setMinimumHeight(40)
-        self.btn_string_functions.setEnabled(False)
-        self.btn_string_functions.setStyleSheet(advanced_style)
-        self.btn_string_functions.clicked.connect(self.show_string_functions_dialog)
-        buttons_layout.addWidget(self.btn_string_functions)
-
-        self.btn_join_wizard = QPushButton("Мастер соединений (JOIN)")
-        self.btn_join_wizard.setMinimumHeight(40)
-        self.btn_join_wizard.setEnabled(False)
-        self.btn_join_wizard.setStyleSheet(advanced_style)
-        self.btn_join_wizard.clicked.connect(self.show_join_wizard_dialog)
-        buttons_layout.addWidget(self.btn_join_wizard)
-
-        self.btn_subquery_filter = QPushButton("Фильтры на основе подзапросов")
+        self.btn_subquery_filter = QPushButton("Подзапросы")
         self.btn_subquery_filter.setMinimumHeight(40)
         self.btn_subquery_filter.setEnabled(False)
         self.btn_subquery_filter.setStyleSheet(advanced_style_3)
         self.btn_subquery_filter.clicked.connect(self.show_subquery_filter_dialog)
-        buttons_layout.addWidget(self.btn_subquery_filter)
+        new_group_layout.addWidget(self.btn_subquery_filter)
 
-        self.btn_custom_types = QPushButton("Пользовательские типы данных")
+        self.btn_custom_types = QPushButton("Типы")
         self.btn_custom_types.setMinimumHeight(40)
         self.btn_custom_types.setEnabled(False)
         self.btn_custom_types.setStyleSheet(advanced_style_3)
         self.btn_custom_types.clicked.connect(self.show_custom_types_dialog)
-        buttons_layout.addWidget(self.btn_custom_types)
+        new_group_layout.addWidget(self.btn_custom_types)
 
-        self.btn_similar_to = QPushButton("Поиск SIMILAR TO")
+        self.btn_similar_to = QPushButton("SIMILAR TO")
         self.btn_similar_to.setMinimumHeight(40)
         self.btn_similar_to.setEnabled(False)
         self.btn_similar_to.setStyleSheet(advanced_style_3)
         self.btn_similar_to.clicked.connect(self.show_similar_to_dialog)
-        buttons_layout.addWidget(self.btn_similar_to)
+        new_group_layout.addWidget(self.btn_similar_to)
 
-        self.btn_aggregation = QPushButton("Агрегирование и группировка")
+        self.btn_aggregation = QPushButton("GROUP BY")
         self.btn_aggregation.setMinimumHeight(40)
         self.btn_aggregation.setEnabled(False)
         self.btn_aggregation.setStyleSheet(advanced_style_3)
         self.btn_aggregation.clicked.connect(self.show_aggregation_dialog)
-        buttons_layout.addWidget(self.btn_aggregation)
+        new_group_layout.addWidget(self.btn_aggregation)
 
-        self.btn_case_constructor = QPushButton("Конструктор CASE")
+        self.btn_case_constructor = QPushButton("CASE")
         self.btn_case_constructor.setMinimumHeight(40)
         self.btn_case_constructor.setEnabled(False)
         self.btn_case_constructor.setStyleSheet(advanced_style_3)
         self.btn_case_constructor.clicked.connect(self.show_case_constructor_dialog)
-        buttons_layout.addWidget(self.btn_case_constructor)
+        new_group_layout.addWidget(self.btn_case_constructor)
 
-        self.btn_null_functions = QPushButton("COALESCE и NULLIF")
+        self.btn_null_functions = QPushButton("NULL функции")
         self.btn_null_functions.setMinimumHeight(40)
         self.btn_null_functions.setEnabled(False)
         self.btn_null_functions.setStyleSheet(advanced_style_3)
         self.btn_null_functions.clicked.connect(self.show_null_functions_dialog)
-        buttons_layout.addWidget(self.btn_null_functions)
+        new_group_layout.addWidget(self.btn_null_functions)
+
+        new_group.setLayout(new_group_layout)
+        buttons_layout.addWidget(new_group)
 
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)

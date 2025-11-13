@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QGridLayout, QTextEdit,
                                QComboBox, QMessageBox, QTabWidget, QWidget,
                                QTableWidget, QTableWidgetItem, QHeaderView,
-                               QGroupBox, QScrollArea)
+                               QGroupBox, QScrollArea, QCheckBox)
 from PySide6.QtCore import Qt, QTimer
 from typing import Callable
 import logging
@@ -2854,7 +2854,16 @@ class AdvancedGroupingDialog(QDialog):
         
         self.setWindowTitle("Расширенная группировка данных")
         self.setModal(True)
-        self.resize(1200, 700)
+        self.resize(1400, 800)
+        
+        # Словарь таблиц и их колонок для группировки
+        self.table_columns = {
+            'currencies': ['currency_id', 'currency_code', 'is_active'],
+            'exchange_rates': ['base_currency', 'target_currency', 'rate_date'],
+            'clients': ['client_id', 'is_vip'],
+            'accounts': ['client_id', 'currency_code', 'account_status'],
+            'transactions': ['account_id', 'transaction_type', 'currency_code']
+        }
         
         self.setup_ui()
     
@@ -2863,7 +2872,7 @@ class AdvancedGroupingDialog(QDialog):
         
         self.setStyleSheet("""
             QPushButton {
-                background-color: #17A2B8;
+                background-color: #0066cc;
                 color: white;
                 font-weight: bold;
                 padding: 8px 15px;
@@ -2871,7 +2880,7 @@ class AdvancedGroupingDialog(QDialog):
                 border-radius: 5px;
             }
             QPushButton:hover {
-                background-color: #138496;
+                background-color: #0052a3;
             }
         """)
         
@@ -2879,46 +2888,58 @@ class AdvancedGroupingDialog(QDialog):
         title.setStyleSheet("font-weight: bold; font-size: 12pt;")
         layout.addWidget(title)
         
-        filter_layout = QGridLayout()
+        # Верхняя часть с выбором таблицы и типа группировки
+        top_layout = QGridLayout()
         
-        filter_layout.addWidget(QLabel("Таблица:"), 0, 0)
+        top_layout.addWidget(QLabel("Таблица:"), 0, 0)
         self.table_combo = QComboBox()
-        self.table_combo.addItems(['currencies', 'exchange_rates', 'clients', 'accounts', 'transactions'])
+        self.table_combo.addItems(list(self.table_columns.keys()))
         self.table_combo.currentTextChanged.connect(self.on_table_changed)
-        filter_layout.addWidget(self.table_combo, 0, 1)
+        top_layout.addWidget(self.table_combo, 0, 1)
         
-        filter_layout.addWidget(QLabel("SELECT:"), 0, 2)
+        top_layout.addWidget(QLabel("SELECT:"), 0, 2)
         self.select_edit = QLineEdit()
         self.select_edit.setText("*")
-        filter_layout.addWidget(self.select_edit, 0, 3)
+        top_layout.addWidget(self.select_edit, 0, 3)
         
-        filter_layout.addWidget(QLabel("Тип группировки:"), 1, 0)
+        top_layout.addWidget(QLabel("Тип группировки:"), 1, 0)
         self.group_type_combo = QComboBox()
         self.group_type_combo.addItems(['ROLLUP', 'CUBE', 'GROUPING_SETS'])
-        filter_layout.addWidget(self.group_type_combo, 1, 1)
+        top_layout.addWidget(self.group_type_combo, 1, 1)
         
-        filter_layout.addWidget(QLabel("GROUP BY колонки:"), 1, 2)
-        self.group_cols_edit = QLineEdit()
-        self.group_cols_edit.setPlaceholderText("col1, col2, col3")
-        self.group_cols_edit.setText("currency_code")
-        filter_layout.addWidget(self.group_cols_edit, 1, 3)
-        
-        filter_layout.addWidget(QLabel("WHERE условие:"), 2, 0)
+        top_layout.addWidget(QLabel("WHERE условие (опционально):"), 1, 2)
         self.where_edit = QLineEdit()
-        self.where_edit.setPlaceholderText("amount > 100")
-        filter_layout.addWidget(self.where_edit, 2, 1, 1, 3)
+        self.where_edit.setPlaceholderText("is_active = TRUE")
+        top_layout.addWidget(self.where_edit, 1, 3)
         
-        filter_layout.addWidget(QLabel("ORDER BY:"), 3, 0)
+        layout.addLayout(top_layout)
+        
+        # Средняя часть с выбором колонок для GROUP BY
+        group_box = QGroupBox("Выберите колонки для GROUP BY")
+        group_layout = QHBoxLayout()
+        
+        self.column_checkboxes = {}
+        self.update_column_checkboxes()
+        
+        group_layout.addLayout(self.columns_layout)
+        group_box.setLayout(group_layout)
+        layout.addWidget(group_box)
+        
+        # WHERE и ORDER BY
+        filter_layout = QGridLayout()
+        
+        filter_layout.addWidget(QLabel("ORDER BY:"), 0, 0)
         self.order_edit = QLineEdit()
         self.order_edit.setPlaceholderText("1, 2")
-        filter_layout.addWidget(self.order_edit, 3, 1, 1, 3)
+        filter_layout.addWidget(self.order_edit, 0, 1, 1, 3)
         
         execute_btn = QPushButton("Выполнить группировку")
         execute_btn.clicked.connect(self.execute_grouping)
-        filter_layout.addWidget(execute_btn, 4, 3)
+        filter_layout.addWidget(execute_btn, 1, 3)
         
         layout.addLayout(filter_layout)
         
+        # Таблица результатов
         self.result_table = QTableWidget()
         self.result_table.setColumnCount(0)
         self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
@@ -2926,7 +2947,8 @@ class AdvancedGroupingDialog(QDialog):
         layout.addWidget(self.result_table)
         
         self.sql_label = QLabel("SQL:")
-        self.sql_label.setStyleSheet("color: #666; font-size: 9pt;")
+        self.sql_label.setStyleSheet("color: #666; font-size: 9pt; word-wrap: break-word;")
+        self.sql_label.setWordWrap(True)
         layout.addWidget(self.sql_label)
         
         buttons_layout = QHBoxLayout()
@@ -2937,26 +2959,63 @@ class AdvancedGroupingDialog(QDialog):
         buttons_layout.addWidget(close_btn)
         layout.addLayout(buttons_layout)
     
+    def update_column_checkboxes(self):
+        """Обновляем checkboxes для колонок выбранной таблицы"""
+        table = self.table_combo.currentText()
+        cols = self.table_columns.get(table, [])
+        
+        # Очищаем старые checkboxes
+        if hasattr(self, 'columns_layout'):
+            while self.columns_layout.count():
+                child = self.columns_layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+        else:
+            self.columns_layout = QVBoxLayout()
+        
+        self.column_checkboxes = {}
+        
+        # Создаем новые checkboxes
+        for col in cols:
+            cb = QCheckBox(col)
+            cb.setChecked(False)
+            self.column_checkboxes[col] = cb
+            self.columns_layout.addWidget(cb)
+        
+        # Выбираем первую колонку по умолчанию
+        if cols:
+            first_cb = self.column_checkboxes.get(cols[0])
+            if first_cb:
+                first_cb.setChecked(True)
+    
     def on_table_changed(self):
-        pass
+        """При смене таблицы обновляем checkboxes"""
+        self.update_column_checkboxes()
     
     def execute_grouping(self):
         try:
             table = self.table_combo.currentText()
             select_cols = self.select_edit.text().strip()
             group_type = self.group_type_combo.currentText()
-            group_cols_str = self.group_cols_edit.text().strip()
             where = self.where_edit.text().strip()
             order = self.order_edit.text().strip()
             
-            if not group_cols_str:
-                QMessageBox.warning(self, "Ошибка", "Укажите колонки для GROUP BY")
+            # Получаем выбранные колонки
+            selected_cols = [col for col, cb in self.column_checkboxes.items() if cb.isChecked()]
+            
+            if not selected_cols:
+                QMessageBox.warning(self, "Ошибка", "Выберите хотя бы одну колонку для GROUP BY")
                 return
             
-            group_cols = [c.strip() for c in group_cols_str.split(',')]
+            group_cols_str = ", ".join(selected_cols)
+            
+            # При SELECT * с ROLLUP/CUBE/GROUPING_SETS нужно выбирать только GROUP BY колонки
+            # или использовать агрегатные функции
+            if select_cols == '*':
+                select_cols = group_cols_str + ", COUNT(*) as count"
             
             results, column_names = self.db_manager.execute_advanced_grouping(
-                table, select_cols, group_type, group_cols, where or None, order=order or None
+                table, select_cols, group_type, selected_cols, where or None, order=order or None
             )
             
             sql = f"SELECT {select_cols} FROM bank_system.{table}"

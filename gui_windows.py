@@ -3039,3 +3039,188 @@ class AdvancedGroupingDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка группировки:\n{str(e)}")
             self.logger.error(f"Advanced grouping error: {e}")
+
+
+class ViewManagementDialog(QDialog):
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logging.getLogger('ViewManagementDialog')
+        
+        self.setWindowTitle("Управление представлениями (VIEW)")
+        self.setModal(True)
+        self.resize(1400, 800)
+        
+        self.setup_ui()
+        self.refresh_views()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #FF6B35;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #E55100;
+            }
+        """)
+        
+        title = QLabel("Управление представлениями (VIEW)")
+        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        layout.addWidget(title)
+        
+        # Верхняя часть - список представлений
+        top_layout = QHBoxLayout()
+        
+        top_layout.addWidget(QLabel("Существующие представления:"))
+        self.views_combo = QComboBox()
+        self.views_combo.currentTextChanged.connect(self.on_view_selected)
+        top_layout.addWidget(self.views_combo)
+        
+        refresh_btn = QPushButton("Обновить список")
+        refresh_btn.clicked.connect(self.refresh_views)
+        refresh_btn.setMaximumWidth(150)
+        top_layout.addWidget(refresh_btn)
+        
+        layout.addLayout(top_layout)
+        
+        # Средняя часть - определение представления
+        def_group = QGroupBox("Определение представления")
+        def_layout = QVBoxLayout()
+        
+        self.definition_text = QTextEdit()
+        self.definition_text.setReadOnly(True)
+        self.definition_text.setMaximumHeight(150)
+        self.definition_text.setStyleSheet("background-color: #f8f9fa; border: 1px solid #ddd;")
+        def_layout.addWidget(self.definition_text)
+        
+        def_group.setLayout(def_layout)
+        layout.addWidget(def_group)
+        
+        # Кнопки для управления
+        buttons_layout = QHBoxLayout()
+        
+        delete_btn = QPushButton("Удалить представление")
+        delete_btn.clicked.connect(self.delete_view)
+        delete_btn.setStyleSheet("background-color: #dc3545;")
+        buttons_layout.addWidget(delete_btn)
+        
+        buttons_layout.addStretch()
+        layout.addLayout(buttons_layout)
+        
+        # Нижняя часть - создание нового представления
+        create_group = QGroupBox("Создать новое представление")
+        create_layout = QVBoxLayout()
+        
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Имя представления:"))
+        self.view_name_edit = QLineEdit()
+        self.view_name_edit.setPlaceholderText("my_view")
+        name_layout.addWidget(self.view_name_edit)
+        create_layout.addLayout(name_layout)
+        
+        create_layout.addWidget(QLabel("SQL запрос:"))
+        self.sql_edit = QTextEdit()
+        self.sql_edit.setPlaceholderText("SELECT * FROM bank_system.currencies WHERE is_active = TRUE")
+        self.sql_edit.setMaximumHeight(150)
+        create_layout.addWidget(self.sql_edit)
+        
+        create_btn = QPushButton("Создать представление")
+        create_btn.clicked.connect(self.create_view)
+        create_btn.setStyleSheet("background-color: #28a745;")
+        create_layout.addWidget(create_btn)
+        
+        create_group.setLayout(create_layout)
+        layout.addWidget(create_group)
+        
+        # Кнопка закрытия
+        close_layout = QHBoxLayout()
+        close_layout.addStretch()
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("background-color: #6c757d;")
+        close_layout.addWidget(close_btn)
+        layout.addLayout(close_layout)
+    
+    def refresh_views(self):
+        """Обновить список представлений"""
+        try:
+            views = self.db_manager.get_views()
+            self.views_combo.blockSignals(True)
+            self.views_combo.clear()
+            self.views_combo.addItems(views)
+            self.views_combo.blockSignals(False)
+            self.definition_text.clear()
+            
+            if views:
+                self.on_view_selected(views[0])
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при получении списка представлений:\n{str(e)}")
+            self.logger.error(f"Refresh views error: {e}")
+    
+    def on_view_selected(self, view_name: str):
+        """Показать определение выбранного представления"""
+        if not view_name:
+            self.definition_text.clear()
+            return
+        
+        try:
+            definition = self.db_manager.get_view_definition(view_name)
+            self.definition_text.setText(definition)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при получении определения представления:\n{str(e)}")
+            self.logger.error(f"Get view definition error: {e}")
+    
+    def create_view(self):
+        """Создать новое представление"""
+        view_name = self.view_name_edit.text().strip()
+        sql_query = self.sql_edit.toPlainText().strip()
+        
+        if not view_name:
+            QMessageBox.warning(self, "Ошибка", "Укажите имя представления")
+            return
+        
+        if not sql_query:
+            QMessageBox.warning(self, "Ошибка", "Укажите SQL запрос")
+            return
+        
+        try:
+            self.db_manager.create_view(view_name, sql_query)
+            QMessageBox.information(self, "Успех", f"Представление '{view_name}' успешно создано")
+            self.view_name_edit.clear()
+            self.sql_edit.clear()
+            self.refresh_views()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка создания представления:\n{str(e)}")
+            self.logger.error(f"Create view error: {e}")
+    
+    def delete_view(self):
+        """Удалить представление"""
+        view_name = self.views_combo.currentText()
+        
+        if not view_name:
+            QMessageBox.warning(self, "Ошибка", "Выберите представление для удаления")
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение удаления",
+            f"Вы уверены, что хотите удалить представление '{view_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.db_manager.drop_view(view_name)
+                QMessageBox.information(self, "Успех", f"Представление '{view_name}' успешно удалено")
+                self.refresh_views()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Ошибка удаления представления:\n{str(e)}")
+                self.logger.error(f"Delete view error: {e}")

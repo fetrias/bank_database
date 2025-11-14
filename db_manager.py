@@ -778,3 +778,85 @@ class DatabaseManager:
             self.connection.rollback()
             self.logger.error(f"Advanced grouping error: {e}")
             raise
+    
+    def create_view(self, view_name: str, sql_query: str) -> bool:
+        """Создать обычное представление (VIEW)"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                # Проверим, что представление еще не существует
+                cursor.execute(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.views "
+                    "WHERE table_name = %s AND table_schema = 'bank_system')",
+                    (view_name,)
+                )
+                if cursor.fetchone()[0]:
+                    raise Exception(f"View '{view_name}' already exists")
+                
+                # Создаем представление
+                create_view_sql = f"CREATE VIEW bank_system.{view_name} AS {sql_query}"
+                cursor.execute(create_view_sql)
+                self.connection.commit()
+                self.logger.info(f"View '{view_name}' created successfully")
+                return True
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Create view error: {e}")
+            raise
+    
+    def get_views(self) -> List[str]:
+        """Получить список всех представлений в схеме bank_system"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT table_name FROM information_schema.views "
+                    "WHERE table_schema = 'bank_system' "
+                    "AND table_name NOT LIKE 'pg_%' "
+                    "ORDER BY table_name"
+                )
+                views = [row[0] for row in cursor.fetchall()]
+                return views
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.logger.error(f"Get views error: {e}")
+            return []
+    
+    def get_view_definition(self, view_name: str) -> str:
+        """Получить определение представления"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT view_definition FROM information_schema.views "
+                    "WHERE table_name = %s AND table_schema = 'bank_system'",
+                    (view_name,)
+                )
+                result = cursor.fetchone()
+                return result[0] if result else ""
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.logger.error(f"Get view definition error: {e}")
+            raise
+    
+    def drop_view(self, view_name: str, cascade: bool = False) -> bool:
+        """Удалить представление"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                cascade_str = "CASCADE" if cascade else "RESTRICT"
+                drop_view_sql = f"DROP VIEW bank_system.{view_name} {cascade_str}"
+                cursor.execute(drop_view_sql)
+                self.connection.commit()
+                self.logger.info(f"View '{view_name}' dropped successfully")
+                return True
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Drop view error: {e}")
+            raise

@@ -11,7 +11,8 @@ from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          AlterTableDialog, AdvancedSelectDialog, TextSearchDialog,
                          StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog,
                          CustomTypesDialog, SimilarToDialog, AggregationDialog,
-                         CaseConstructorDialog, NullFunctionsDialog, AdvancedGroupingDialog)
+                         CaseConstructorDialog, NullFunctionsDialog, AdvancedGroupingDialog,
+                         ViewManagementDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -271,6 +272,13 @@ class BankSystemApp(QMainWindow):
         self.btn_advanced_grouping.clicked.connect(self.show_advanced_grouping_dialog)
         fourth_group_layout.addWidget(self.btn_advanced_grouping)
 
+        self.btn_view_management = QPushButton("VIEW")
+        self.btn_view_management.setMinimumHeight(40)
+        self.btn_view_management.setEnabled(False)
+        self.btn_view_management.setStyleSheet(advanced_style_4)
+        self.btn_view_management.clicked.connect(self.show_view_management_dialog)
+        fourth_group_layout.addWidget(self.btn_view_management)
+
         fourth_group.setLayout(fourth_group_layout)
         buttons_layout.addWidget(fourth_group)
 
@@ -371,6 +379,7 @@ class BankSystemApp(QMainWindow):
             self.btn_case_constructor.setEnabled(True)
             self.btn_null_functions.setEnabled(True)
             self.btn_advanced_grouping.setEnabled(True)
+            self.btn_view_management.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -573,6 +582,15 @@ class BankSystemApp(QMainWindow):
         dialog = AdvancedGroupingDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыто окно расширенной группировки данных")
+
+    def show_view_management_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = ViewManagementDialog(self, self.db_manager)
+        dialog.exec()
+        self.add_log("Открыто окно управления представлениями")
 
     def add_log(self, message: str):
         self.log_text.append(f"• {message}")

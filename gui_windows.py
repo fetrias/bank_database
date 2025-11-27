@@ -2,8 +2,9 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QGridLayout, QTextEdit,
                                QComboBox, QMessageBox, QTabWidget, QWidget,
                                QTableWidget, QTableWidgetItem, QHeaderView,
-                               QGroupBox, QScrollArea, QCheckBox, QFormLayout)
+                               QGroupBox, QScrollArea, QCheckBox, QFormLayout, QApplication)
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QClipboard
 from typing import Callable
 import logging
 
@@ -3449,3 +3450,377 @@ class MaterializedViewManagementDialog(QDialog):
                 self.mview_columns.insertWidget(self.mview_columns.count() - 1, checkbox)
         except Exception as e:
             self.logger.error(f"Update materialized view columns error: {e}")
+
+
+class CTEConstructorDialog(QDialog):
+    """Конструктор для работы с Common Table Expressions (CTE)"""
+    
+    def __init__(self, db_manager, logger, parent=None):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logger
+        self.ctes = {}  # Словарь CTE: {имя: {таблица, колонки, условие}}
+        
+        self.setWindowTitle("Конструктор CTE (WITH запросы)")
+        self.setGeometry(100, 100, 1000, 700)
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        # Верхняя часть - добавление новой CTE
+        layout.addWidget(QLabel("Создать новую временную выборку (CTE):"))
+        
+        form_layout = QFormLayout()
+        
+        self.cte_name_edit = QLineEdit()
+        self.cte_name_edit.setPlaceholderText("Например: recent_transactions")
+        form_layout.addRow("Имя CTE:", self.cte_name_edit)
+        
+        self.cte_table_combo = QComboBox()
+        form_layout.addRow("Выберите таблицу:", self.cte_table_combo)
+        
+        layout.addLayout(form_layout)
+        
+        # Выбор колонок
+        layout.addWidget(QLabel("Выберите колонки:"))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        self.cte_columns = QVBoxLayout(scroll_widget)
+        self.cte_columns.addStretch()
+        scroll.setWidget(scroll_widget)
+        scroll.setMaximumHeight(100)
+        layout.addWidget(scroll)
+        
+        # WHERE условие
+        layout.addWidget(QLabel("WHERE условие (опционально):"))
+        self.cte_where_edit = QTextEdit()
+        self.cte_where_edit.setPlaceholderText("Например: amount > 1000")
+        self.cte_where_edit.setMaximumHeight(60)
+        layout.addWidget(self.cte_where_edit)
+        
+        # Кнопка добавления CTE
+        add_cte_btn = QPushButton("Добавить CTE")
+        add_cte_btn.clicked.connect(self.add_cte)
+        add_cte_btn.setStyleSheet("background-color: #0066cc; color: white; font-weight: bold; padding: 5px;")
+        layout.addWidget(add_cte_btn)
+        
+        layout.addWidget(QLabel(""))
+        
+        # Список добавленных CTE
+        layout.addWidget(QLabel("Добавленные временные выборки:"))
+        
+        self.ctes_list = QTableWidget()
+        self.ctes_list.setColumnCount(3)
+        self.ctes_list.setHorizontalHeaderLabels(["Имя CTE", "Таблица", "Действия"])
+        self.ctes_list.horizontalHeader().setStretchLastSection(False)
+        layout.addWidget(self.ctes_list)
+        
+        # Построение финального запроса
+        layout.addWidget(QLabel("Основной запрос (SELECT из CTE):"))
+        
+        self.main_select_table_combo = QComboBox()
+        self.main_select_table_combo.currentTextChanged.connect(self.update_main_columns)
+        layout.addWidget(QLabel("Выберите источник данных:"))
+        layout.addWidget(self.main_select_table_combo)
+        
+        layout.addWidget(QLabel("Выберите колонки для результата:"))
+        scroll2 = QScrollArea()
+        scroll2.setWidgetResizable(True)
+        scroll_widget2 = QWidget()
+        self.main_columns = QVBoxLayout(scroll_widget2)
+        self.main_columns.addStretch()
+        scroll2.setWidget(scroll_widget2)
+        scroll2.setMaximumHeight(100)
+        layout.addWidget(scroll2)
+        
+        # WHERE условие для основного запроса
+        layout.addWidget(QLabel("WHERE условие для основного запроса (опционально):"))
+        self.main_where_edit = QTextEdit()
+        self.main_where_edit.setMaximumHeight(60)
+        layout.addWidget(self.main_where_edit)
+        
+        # Кнопки действий
+        buttons_layout = QHBoxLayout()
+        
+        execute_btn = QPushButton("Выполнить запрос")
+        execute_btn.clicked.connect(self.execute_query)
+        execute_btn.setStyleSheet("background-color: #27AE60; color: white; font-weight: bold; padding: 5px;")
+        buttons_layout.addWidget(execute_btn)
+        
+        copy_btn = QPushButton("Скопировать SQL")
+        copy_btn.clicked.connect(self.copy_sql)
+        buttons_layout.addWidget(copy_btn)
+        
+        layout.addLayout(buttons_layout)
+        
+        # Предпросмотр SQL
+        layout.addWidget(QLabel("Генерируемый SQL:"))
+        self.sql_preview = QTextEdit()
+        self.sql_preview.setReadOnly(True)
+        self.sql_preview.setMaximumHeight(120)
+        layout.addWidget(self.sql_preview)
+        
+        # Результаты запроса
+        layout.addWidget(QLabel("Результаты:"))
+        self.results_table = QTableWidget()
+        layout.addWidget(self.results_table)
+        
+        self.setLayout(layout)
+        self.load_tables()
+        self.cte_table_combo.currentTextChanged.connect(self.update_cte_columns)
+    
+    def load_tables(self):
+        """Загрузить список таблиц"""
+        try:
+            tables = self.db_manager.get_tables_list()
+            self.cte_table_combo.blockSignals(True)
+            self.main_select_table_combo.blockSignals(True)
+            
+            self.cte_table_combo.clear()
+            self.main_select_table_combo.clear()
+            
+            self.cte_table_combo.addItems(tables)
+            self.main_select_table_combo.addItems(tables)
+            
+            self.cte_table_combo.blockSignals(False)
+            self.main_select_table_combo.blockSignals(False)
+            
+            if tables:
+                self.update_cte_columns(tables[0])
+                self.update_main_columns(tables[0])
+        except Exception as e:
+            self.logger.error(f"Load tables error: {e}")
+    
+    def update_cte_columns(self, table_name):
+        """Обновить список колонок для CTE таблицы"""
+        if not table_name:
+            return
+        
+        while self.cte_columns.count() > 0:
+            item = self.cte_columns.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+        
+        try:
+            columns_info = self.db_manager.get_table_columns(table_name)
+            for col_info in columns_info:
+                col_name = col_info['name']
+                checkbox = QCheckBox(col_name)
+                checkbox.setChecked(True)
+                self.cte_columns.insertWidget(self.cte_columns.count() - 1, checkbox)
+        except Exception as e:
+            self.logger.error(f"Update CTE columns error: {e}")
+    
+    def update_main_columns(self, table_name):
+        """Обновить список колонок для основного запроса"""
+        if not table_name:
+            return
+        
+        while self.main_columns.count() > 0:
+            item = self.main_columns.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+        
+        try:
+            # Если выбрана CTE, показать её колонки
+            if table_name in self.ctes:
+                for col in self.ctes[table_name]['selected_columns']:
+                    checkbox = QCheckBox(col)
+                    checkbox.setChecked(True)
+                    self.main_columns.insertWidget(self.main_columns.count() - 1, checkbox)
+            else:
+                # Иначе показать колонки таблицы
+                columns_info = self.db_manager.get_table_columns(table_name)
+                for col_info in columns_info:
+                    col_name = col_info['name']
+                    checkbox = QCheckBox(col_name)
+                    checkbox.setChecked(True)
+                    self.main_columns.insertWidget(self.main_columns.count() - 1, checkbox)
+        except Exception as e:
+            self.logger.error(f"Update main columns error: {e}")
+    
+    def add_cte(self):
+        """Добавить новую CTE"""
+        cte_name = self.cte_name_edit.text().strip()
+        table_name = self.cte_table_combo.currentText()
+        
+        if not cte_name:
+            QMessageBox.warning(self, "Ошибка", "Укажите имя CTE")
+            return
+        
+        if not table_name:
+            QMessageBox.warning(self, "Ошибка", "Выберите таблицу")
+            return
+        
+        if cte_name in self.ctes:
+            QMessageBox.warning(self, "Ошибка", f"CTE с именем '{cte_name}' уже существует")
+            return
+        
+        # Собрать выбранные колонки
+        selected_columns = []
+        for i in range(self.cte_columns.count()):
+            item = self.cte_columns.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, QCheckBox) and widget.isChecked():
+                    selected_columns.append(widget.text())
+        
+        if not selected_columns:
+            QMessageBox.warning(self, "Ошибка", "Выберите хотя бы одну колонку")
+            return
+        
+        where_condition = self.cte_where_edit.toPlainText().strip()
+        
+        # Сохранить CTE
+        self.ctes[cte_name] = {
+            'table': table_name,
+            'selected_columns': selected_columns,
+            'where': where_condition
+        }
+        
+        # Добавить в таблицу
+        self.ctes_list.insertRow(self.ctes_list.rowCount())
+        row = self.ctes_list.rowCount() - 1
+        self.ctes_list.setItem(row, 0, QTableWidgetItem(cte_name))
+        self.ctes_list.setItem(row, 1, QTableWidgetItem(table_name))
+        
+        delete_btn = QPushButton("Удалить")
+        delete_btn.clicked.connect(lambda checked, name=cte_name: self.delete_cte(name))
+        self.ctes_list.setCellWidget(row, 2, delete_btn)
+        
+        # Очистить форму
+        self.cte_name_edit.clear()
+        self.cte_where_edit.clear()
+        
+        # Обновить комбобокс источников
+        cte_names = list(self.ctes.keys())
+        all_sources = cte_names + self.db_manager.get_tables_list()
+        self.main_select_table_combo.blockSignals(True)
+        current_text = self.main_select_table_combo.currentText()
+        self.main_select_table_combo.clear()
+        self.main_select_table_combo.addItems(all_sources)
+        if current_text in all_sources:
+            self.main_select_table_combo.setCurrentText(current_text)
+        self.main_select_table_combo.blockSignals(False)
+        
+        QMessageBox.information(self, "Успех", f"CTE '{cte_name}' добавлена")
+    
+    def delete_cte(self, cte_name):
+        """Удалить CTE"""
+        if cte_name in self.ctes:
+            del self.ctes[cte_name]
+            
+            # Удалить из таблицы
+            for row in range(self.ctes_list.rowCount()):
+                if self.ctes_list.item(row, 0).text() == cte_name:
+                    self.ctes_list.removeRow(row)
+                    break
+            
+            # Обновить комбобокс
+            cte_names = list(self.ctes.keys())
+            all_sources = cte_names + self.db_manager.get_tables_list()
+            self.main_select_table_combo.blockSignals(True)
+            current_text = self.main_select_table_combo.currentText()
+            self.main_select_table_combo.clear()
+            self.main_select_table_combo.addItems(all_sources)
+            if current_text in all_sources:
+                self.main_select_table_combo.setCurrentText(current_text)
+            self.main_select_table_combo.blockSignals(False)
+    
+    def build_sql(self):
+        """Построить SQL запрос"""
+        sql_parts = []
+        
+        # Построить WITH часть
+        if self.ctes:
+            cte_list = []
+            for cte_name, cte_info in self.ctes.items():
+                table = cte_info['table']
+                columns = ", ".join(cte_info['selected_columns'])
+                cte_sql = f"{cte_name} AS (SELECT {columns} FROM bank_system.{table}"
+                
+                if cte_info['where']:
+                    cte_sql += f" WHERE {cte_info['where']}"
+                
+                cte_sql += ")"
+                cte_list.append(cte_sql)
+            
+            sql_parts.append("WITH " + ",\n     ".join(cte_list))
+        
+        # Построить основной SELECT
+        main_table = self.main_select_table_combo.currentText()
+        if not main_table:
+            return None
+        
+        # Собрать выбранные колонки
+        selected_columns = []
+        for i in range(self.main_columns.count()):
+            item = self.main_columns.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, QCheckBox) and widget.isChecked():
+                    selected_columns.append(widget.text())
+        
+        if not selected_columns:
+            return None
+        
+        columns_str = ", ".join(selected_columns)
+        
+        # Определить, это CTE или таблица
+        if main_table in self.ctes:
+            main_sql = f"SELECT {columns_str} FROM {main_table}"
+        else:
+            main_sql = f"SELECT {columns_str} FROM bank_system.{main_table}"
+        
+        main_where = self.main_where_edit.toPlainText().strip()
+        if main_where:
+            main_sql += f" WHERE {main_where}"
+        
+        sql_parts.append(main_sql)
+        
+        return "\n".join(sql_parts)
+    
+    def execute_query(self):
+        """Выполнить построенный запрос"""
+        sql = self.build_sql()
+        if not sql:
+            QMessageBox.warning(self, "Ошибка", "Не удалось построить запрос")
+            return
+        
+        self.sql_preview.setText(sql)
+        
+        try:
+            results = self.db_manager.execute_query(sql)
+            self.display_results(results)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка выполнения запроса:\n{str(e)}")
+            self.logger.error(f"CTE execute error: {e}")
+    
+    def display_results(self, results):
+        """Отобразить результаты запроса"""
+        if not results:
+            self.results_table.setRowCount(0)
+            self.results_table.setColumnCount(0)
+            return
+        
+        # Получить названия колонок
+        first_row = results[0]
+        columns = [str(i) for i in range(len(first_row))]
+        
+        self.results_table.setColumnCount(len(columns))
+        self.results_table.setHorizontalHeaderLabels(columns)
+        self.results_table.setRowCount(len(results))
+        
+        for row_idx, row_data in enumerate(results):
+            for col_idx, value in enumerate(row_data):
+                self.results_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+    
+    def copy_sql(self):
+        """Скопировать SQL в буфер обмена"""
+        sql = self.build_sql()
+        if sql:
+            clipboard = QApplication.clipboard()
+            clipboard.setText(sql)
+            QMessageBox.information(self, "Успех", "SQL скопирован в буфер обмена")

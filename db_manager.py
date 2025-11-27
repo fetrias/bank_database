@@ -786,8 +786,8 @@ class DatabaseManager:
             try:
                 # Проверим, что представление еще не существует
                 cursor.execute(
-                    "SELECT EXISTS (SELECT 1 FROM information_schema.views "
-                    "WHERE table_name = %s AND table_schema = 'bank_system')",
+                    "SELECT EXISTS (SELECT 1 FROM pg_views "
+                    "WHERE viewname = %s AND schemaname = 'bank_system')",
                     (view_name,)
                 )
                 if cursor.fetchone()[0]:
@@ -797,7 +797,6 @@ class DatabaseManager:
                 create_view_sql = f"CREATE VIEW bank_system.{view_name} AS {sql_query}"
                 cursor.execute(create_view_sql)
                 self.connection.commit()
-                self.logger.info(f"View '{view_name}' created successfully")
                 return True
             finally:
                 cursor.close()
@@ -812,10 +811,10 @@ class DatabaseManager:
             cursor = self.connection.cursor()
             try:
                 cursor.execute(
-                    "SELECT table_name FROM information_schema.views "
-                    "WHERE table_schema = 'bank_system' "
-                    "AND table_name NOT LIKE 'pg_%' "
-                    "ORDER BY table_name"
+                    "SELECT viewname FROM pg_views "
+                    "WHERE schemaname = 'bank_system' "
+                    "AND viewname NOT LIKE 'pg_%' "
+                    "ORDER BY viewname"
                 )
                 views = [row[0] for row in cursor.fetchall()]
                 return views
@@ -831,8 +830,8 @@ class DatabaseManager:
             cursor = self.connection.cursor()
             try:
                 cursor.execute(
-                    "SELECT view_definition FROM information_schema.views "
-                    "WHERE table_name = %s AND table_schema = 'bank_system'",
+                    "SELECT definition FROM pg_views "
+                    "WHERE viewname = %s AND schemaname = 'bank_system'",
                     (view_name,)
                 )
                 result = cursor.fetchone()
@@ -859,4 +858,100 @@ class DatabaseManager:
         except Exception as e:
             self.connection.rollback()
             self.logger.error(f"Drop view error: {e}")
+            raise
+    
+    def get_materialized_views(self) -> List[str]:
+        """Получить список всех материализованных представлений в схеме bank_system"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT matviewname FROM pg_matviews "
+                    "WHERE schemaname = 'bank_system' "
+                    "ORDER BY matviewname"
+                )
+                mviews = [row[0] for row in cursor.fetchall()]
+                return mviews
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.logger.error(f"Get materialized views error: {e}")
+            return []
+    
+    def create_materialized_view(self, view_name: str, sql_query: str) -> bool:
+        """Создать материализованное представление (MATERIALIZED VIEW)"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                # Проверим, что представление еще не существует
+                cursor.execute(
+                    "SELECT EXISTS (SELECT 1 FROM pg_matviews "
+                    "WHERE matviewname = %s AND schemaname = 'bank_system')",
+                    (view_name,)
+                )
+                if cursor.fetchone()[0]:
+                    raise Exception(f"Materialized view '{view_name}' already exists")
+                
+                # Создаем материализованное представление
+                create_mview_sql = f"CREATE MATERIALIZED VIEW bank_system.{view_name} AS {sql_query}"
+                cursor.execute(create_mview_sql)
+                self.connection.commit()
+                return True
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Create materialized view error: {e}")
+            raise
+    
+    def get_materialized_view_definition(self, view_name: str) -> str:
+        """Получить определение материализованного представления"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT definition FROM pg_matviews "
+                    "WHERE matviewname = %s AND schemaname = 'bank_system'",
+                    (view_name,)
+                )
+                result = cursor.fetchone()
+                return result[0] if result else "Определение не найдено"
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.logger.error(f"Get materialized view definition error: {e}")
+            raise
+    
+    def refresh_materialized_view(self, view_name: str, concurrent: bool = False) -> bool:
+        """Обновить материализованное представление"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                concurrent_str = "CONCURRENTLY" if concurrent else ""
+                sql = f"REFRESH MATERIALIZED VIEW {concurrent_str} bank_system.{view_name}"
+                cursor.execute(sql)
+                self.connection.commit()
+                return True
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Refresh materialized view error: {e}")
+            raise
+    
+    def drop_materialized_view(self, view_name: str, cascade: bool = False) -> bool:
+        """Удалить материализованное представление"""
+        try:
+            cursor = self.connection.cursor()
+            try:
+                cascade_str = "CASCADE" if cascade else "RESTRICT"
+                drop_sql = f"DROP MATERIALIZED VIEW {cascade_str} bank_system.{view_name}"
+                cursor.execute(drop_sql)
+                self.connection.commit()
+                return True
+            finally:
+                cursor.close()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Drop materialized view error: {e}")
             raise

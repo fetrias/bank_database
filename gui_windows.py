@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QGridLayout, QTextEdit,
                                QComboBox, QMessageBox, QTabWidget, QWidget,
                                QTableWidget, QTableWidgetItem, QHeaderView,
-                               QGroupBox, QScrollArea, QCheckBox)
+                               QGroupBox, QScrollArea, QCheckBox, QFormLayout)
 from PySide6.QtCore import Qt, QTimer
 from typing import Callable
 import logging
@@ -3154,12 +3154,15 @@ class ViewManagementDialog(QDialog):
             views = self.db_manager.get_views()
             self.views_combo.blockSignals(True)
             self.views_combo.clear()
-            self.views_combo.addItems(views)
-            self.views_combo.blockSignals(False)
-            self.definition_text.clear()
             
             if views:
+                self.views_combo.addItems(views)
+                self.views_combo.blockSignals(False)
+                self.views_combo.setCurrentIndex(0)
                 self.on_view_selected(views[0])
+            else:
+                self.views_combo.blockSignals(False)
+                self.definition_text.clear()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при получении списка представлений:\n{str(e)}")
             self.logger.error(f"Refresh views error: {e}")
@@ -3198,7 +3201,6 @@ class ViewManagementDialog(QDialog):
             self.refresh_views()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка создания представления:\n{str(e)}")
-            self.logger.error(f"Create view error: {e}")
     
     def delete_view(self):
         """Удалить представление"""
@@ -3224,3 +3226,226 @@ class ViewManagementDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", f"Ошибка удаления представления:\n{str(e)}")
                 self.logger.error(f"Delete view error: {e}")
+
+
+class MaterializedViewManagementDialog(QDialog):
+    """Диалог для управления материализованными представлениями"""
+    
+    def __init__(self, db_manager, logger, parent=None):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.logger = logger
+        self.setWindowTitle("Материализованные представления")
+        self.setGeometry(100, 100, 800, 600)
+        self.init_ui()
+        self.refresh_views()
+    
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        # Верхняя часть - список существующих представлений
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(QLabel("Выберите представление:"))
+        
+        self.mviews_combo = QComboBox()
+        self.mviews_combo.currentTextChanged.connect(self.on_view_selected)
+        top_layout.addWidget(self.mviews_combo)
+        
+        self.refresh_btn = QPushButton("Обновить список")
+        self.refresh_btn.clicked.connect(self.refresh_views)
+        top_layout.addWidget(self.refresh_btn)
+        
+        layout.addLayout(top_layout)
+        
+        # Определение представления
+        layout.addWidget(QLabel("Определение представления:"))
+        self.definition_text = QTextEdit()
+        self.definition_text.setReadOnly(True)
+        layout.addWidget(self.definition_text)
+        
+        # Кнопки управления
+        control_layout = QHBoxLayout()
+        
+        self.refresh_mview_btn = QPushButton("Обновить данные")
+        self.refresh_mview_btn.clicked.connect(self.refresh_mview_data)
+        control_layout.addWidget(self.refresh_mview_btn)
+        
+        self.delete_mview_btn = QPushButton("Удалить")
+        self.delete_mview_btn.clicked.connect(self.delete_view)
+        control_layout.addWidget(self.delete_mview_btn)
+        
+        layout.addLayout(control_layout)
+        
+        # Создание нового представления
+        layout.addWidget(QLabel("Создать новое материализованное представление:"))
+        
+        form_layout = QFormLayout()
+        
+        self.mview_name_edit = QLineEdit()
+        form_layout.addRow("Имя представления:", self.mview_name_edit)
+        
+        self.table_combo = QComboBox()
+        self.table_combo.currentTextChanged.connect(self.update_mview_columns)
+        form_layout.addRow("Выберите таблицу:", self.table_combo)
+        
+        layout.addLayout(form_layout)
+        
+        # Выбор колонок
+        layout.addWidget(QLabel("Выберите колонки:"))
+        
+        # Контейнер для чекбоксов с прокруткой
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        self.mview_columns = QVBoxLayout(scroll_widget)
+        self.mview_columns.addStretch()
+        scroll.setWidget(scroll_widget)
+        scroll.setMaximumHeight(150)
+        layout.addWidget(scroll)
+        
+        # Кнопка создания
+        create_btn = QPushButton("Создать представление")
+        create_btn.clicked.connect(self.create_view)
+        create_btn.setStyleSheet("background-color: #0066cc; color: white; font-weight: bold; padding: 5px;")
+        layout.addWidget(create_btn)
+        
+        self.setLayout(layout)
+        self.load_mview_tables()
+    
+    def refresh_views(self):
+        """Обновить список материализованных представлений"""
+        try:
+            mviews = self.db_manager.get_materialized_views()
+            self.mviews_combo.blockSignals(True)
+            self.mviews_combo.clear()
+            
+            if mviews:
+                self.mviews_combo.addItems(mviews)
+                self.mviews_combo.blockSignals(False)
+                self.mviews_combo.setCurrentIndex(0)
+                self.on_view_selected(mviews[0])
+            else:
+                self.mviews_combo.blockSignals(False)
+                self.definition_text.clear()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при получении списка материализованных представлений:\n{str(e)}")
+            self.logger.error(f"Refresh materialized views error: {e}")
+    
+    def on_view_selected(self, view_name):
+        """При выборе представления показать его определение"""
+        if not view_name:
+            self.definition_text.clear()
+            return
+        
+        try:
+            definition = self.db_manager.get_materialized_view_definition(view_name)
+            self.definition_text.setText(definition)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при получении определения представления:\n{str(e)}")
+            self.logger.error(f"Get materialized view definition error: {e}")
+    
+    def create_view(self):
+        """Создать новое материализованное представление"""
+        view_name = self.mview_name_edit.text().strip()
+        table_name = self.table_combo.currentText()
+        
+        if not view_name:
+            QMessageBox.warning(self, "Ошибка", "Укажите имя представления")
+            return
+        
+        if not table_name:
+            QMessageBox.warning(self, "Ошибка", "Выберите таблицу")
+            return
+        
+        # Собрать выбранные колонки
+        selected_columns = []
+        for i in range(self.mview_columns.count()):
+            item = self.mview_columns.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, QCheckBox) and widget.isChecked():
+                    selected_columns.append(widget.text())
+        
+        if not selected_columns:
+            QMessageBox.warning(self, "Ошибка", "Выберите хотя бы одну колонку")
+            return
+        
+        # Собрать SQL запрос
+        columns_str = ", ".join(f"bank_system.{table_name}.{col}" for col in selected_columns)
+        sql_query = f"SELECT {columns_str} FROM bank_system.{table_name}"
+        
+        try:
+            self.db_manager.create_materialized_view(view_name, sql_query)
+            QMessageBox.information(self, "Успех", f"Материализованное представление '{view_name}' успешно создано")
+            self.mview_name_edit.clear()
+            self.refresh_views()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка создания представления:\n{str(e)}")
+    
+    def refresh_mview_data(self):
+        """Обновить данные в материализованном представлении"""
+        view_name = self.mviews_combo.currentText()
+        if not view_name:
+            QMessageBox.warning(self, "Ошибка", "Выберите представление")
+            return
+        
+        try:
+            self.db_manager.refresh_materialized_view(view_name)
+            QMessageBox.information(self, "Успех", f"Материализованное представление '{view_name}' обновлено")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка обновления представления:\n{str(e)}")
+    
+    def delete_view(self):
+        """Удалить материализованное представление"""
+        view_name = self.mviews_combo.currentText()
+        if not view_name:
+            QMessageBox.warning(self, "Ошибка", "Выберите представление для удаления")
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Подтверждение", 
+            f"Вы уверены, что хотите удалить представление '{view_name}'?"
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.db_manager.drop_materialized_view(view_name)
+                QMessageBox.information(self, "Успех", f"Материализованное представление '{view_name}' успешно удалено")
+                self.refresh_views()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Ошибка удаления представления:\n{str(e)}")
+    
+    def load_mview_tables(self):
+        """Загрузить список таблиц"""
+        try:
+            tables = self.db_manager.get_tables_list()
+            self.table_combo.blockSignals(True)
+            self.table_combo.clear()
+            self.table_combo.addItems(tables)
+            self.table_combo.blockSignals(False)
+            if tables:
+                self.update_mview_columns(tables[0])
+        except Exception as e:
+            self.logger.error(f"Load materialized view tables error: {e}")
+    
+    def update_mview_columns(self, table_name):
+        """Обновить список колонок для выбранной таблицы"""
+        if not table_name:
+            return
+        
+        # Очистить предыдущие чекбоксы
+        while self.mview_columns.count() > 0:
+            item = self.mview_columns.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+        
+        try:
+            columns_info = self.db_manager.get_table_columns(table_name)
+            for col_info in columns_info:
+                col_name = col_info['name']
+                checkbox = QCheckBox(col_name)
+                checkbox.setChecked(True)
+                self.mview_columns.insertWidget(self.mview_columns.count() - 1, checkbox)
+        except Exception as e:
+            self.logger.error(f"Update materialized view columns error: {e}")

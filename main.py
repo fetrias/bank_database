@@ -12,7 +12,7 @@ from gui_windows import (ConnectionDialog, AddDataDialog, ViewDataDialog,
                          StringFunctionsDialog, JoinWizardDialog, SubqueryFilterDialog,
                          CustomTypesDialog, SimilarToDialog, AggregationDialog,
                          CaseConstructorDialog, NullFunctionsDialog, AdvancedGroupingDialog,
-                         ViewManagementDialog)
+                         ViewManagementDialog, MaterializedViewManagementDialog)
 
 
 class BankSystemApp(QMainWindow):
@@ -278,6 +278,13 @@ class BankSystemApp(QMainWindow):
         self.btn_view_management.setStyleSheet(advanced_style_4)
         self.btn_view_management.clicked.connect(self.show_view_management_dialog)
         fourth_group_layout.addWidget(self.btn_view_management)
+        
+        self.btn_materialized_view = QPushButton("MATERIALIZED VIEW")
+        self.btn_materialized_view.setMinimumHeight(40)
+        self.btn_materialized_view.setEnabled(False)
+        self.btn_materialized_view.setStyleSheet(advanced_style_4)
+        self.btn_materialized_view.clicked.connect(self.show_materialized_view_dialog)
+        fourth_group_layout.addWidget(self.btn_materialized_view)
 
         fourth_group.setLayout(fourth_group_layout)
         buttons_layout.addWidget(fourth_group)
@@ -380,6 +387,7 @@ class BankSystemApp(QMainWindow):
             self.btn_null_functions.setEnabled(True)
             self.btn_advanced_grouping.setEnabled(True)
             self.btn_view_management.setEnabled(True)
+            self.btn_materialized_view.setEnabled(True)
 
             self.add_log("Успешное подключение к базе данных")
             QMessageBox.information(self, "Успех", "Подключение к базе данных установлено")
@@ -591,6 +599,15 @@ class BankSystemApp(QMainWindow):
         dialog = ViewManagementDialog(self, self.db_manager)
         dialog.exec()
         self.add_log("Открыто окно управления представлениями")
+    
+    def show_materialized_view_dialog(self):
+        if not self.is_connected:
+            QMessageBox.warning(self, "Предупреждение", "Нет подключения к базе данных")
+            return
+
+        dialog = MaterializedViewManagementDialog(self.db_manager, self.logger, self)
+        dialog.exec()
+        self.add_log("Открыто окно управления материализованными представлениями")
 
     def add_log(self, message: str):
         self.log_text.append(f"• {message}")

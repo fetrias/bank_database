@@ -1,7 +1,7 @@
 import sys
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QLabel, QTextEdit,
-                               QGroupBox, QMessageBox)
+                               QGroupBox, QMessageBox, QSizePolicy, QScrollArea)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 import logging
@@ -23,16 +23,23 @@ class BankSystemApp(QMainWindow):
         self.is_connected = False
 
         self.setWindowTitle("Банковская система - Работа с валютными операциями")
-        self.setGeometry(100, 100, 900, 700)
+        # Allow the main window to be resized normally; don't hard-lock geometry
+        self.resize(900, 700)
 
         self.setup_ui()
         self.show_connection_dialog()
 
     def setup_ui(self):
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        # Use a scroll area to prevent any widgets from being clipped when the
+        # window is resized or shown fullscreen. Put the full UI into a container
+        # widget which becomes the scroll area widget. This prevents children
+        # from being cut off on small screens or unusual DPI settings.
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        container = QWidget()
+        self.setCentralWidget(scroll_area)
 
-        main_layout = QVBoxLayout(central_widget)
+        main_layout = QVBoxLayout(container)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
@@ -51,6 +58,8 @@ class BankSystemApp(QMainWindow):
         status_group.setLayout(status_layout)
         main_layout.addWidget(status_group)
 
+        # Keep buttons in a vertical box that can expand; use QSizePolicy to
+        # ensure buttons shrink/expand to fit and avoid overflow.
         buttons_layout = QVBoxLayout()
         buttons_layout.setSpacing(10)
 
@@ -74,6 +83,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_create_schema = QPushButton("Создать схему и таблицы")
         self.btn_create_schema.setMinimumHeight(40)
+        self.btn_create_schema.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_create_schema.setEnabled(False)
         self.btn_create_schema.setStyleSheet(button_style)
         self.btn_create_schema.clicked.connect(self.create_schema)
@@ -81,6 +91,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_drop_schema = QPushButton("Удалить схему bank_system")
         self.btn_drop_schema.setMinimumHeight(40)
+        self.btn_drop_schema.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_drop_schema.setEnabled(False)
         self.btn_drop_schema.setStyleSheet("""
             QPushButton {
@@ -104,6 +115,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_insert_data = QPushButton("Внести данные")
         self.btn_insert_data.setMinimumHeight(40)
+        self.btn_insert_data.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_insert_data.setEnabled(False)
         self.btn_insert_data.setStyleSheet(button_style)
         self.btn_insert_data.clicked.connect(self.show_insert_dialog)
@@ -111,6 +123,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_view_data = QPushButton("Показать данные")
         self.btn_view_data.setMinimumHeight(40)
+        self.btn_view_data.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_view_data.setEnabled(False)
         self.btn_view_data.setStyleSheet(button_style)
         self.btn_view_data.clicked.connect(self.show_view_dialog)
@@ -140,6 +153,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_alter_table = QPushButton("ALTER TABLE")
         self.btn_alter_table.setMinimumHeight(40)
+        self.btn_alter_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_alter_table.setEnabled(False)
         self.btn_alter_table.setStyleSheet(advanced_style)
         self.btn_alter_table.clicked.connect(self.show_alter_table_dialog)
@@ -147,6 +161,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_advanced_select = QPushButton("SELECT")
         self.btn_advanced_select.setMinimumHeight(40)
+        self.btn_advanced_select.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_advanced_select.setEnabled(False)
         self.btn_advanced_select.setStyleSheet(advanced_style)
         self.btn_advanced_select.clicked.connect(self.show_advanced_select_dialog)
@@ -154,6 +169,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_text_search = QPushButton("Поиск текста")
         self.btn_text_search.setMinimumHeight(40)
+        self.btn_text_search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_text_search.setEnabled(False)
         self.btn_text_search.setStyleSheet(advanced_style)
         self.btn_text_search.clicked.connect(self.show_text_search_dialog)
@@ -161,6 +177,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_string_functions = QPushButton("Строки")
         self.btn_string_functions.setMinimumHeight(40)
+        self.btn_string_functions.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_string_functions.setEnabled(False)
         self.btn_string_functions.setStyleSheet(advanced_style)
         self.btn_string_functions.clicked.connect(self.show_string_functions_dialog)
@@ -168,6 +185,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_join_wizard = QPushButton("JOIN")
         self.btn_join_wizard.setMinimumHeight(40)
+        self.btn_join_wizard.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_join_wizard.setEnabled(False)
         self.btn_join_wizard.setStyleSheet(advanced_style)
         self.btn_join_wizard.clicked.connect(self.show_join_wizard_dialog)
@@ -200,6 +218,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_subquery_filter = QPushButton("Подзапросы")
         self.btn_subquery_filter.setMinimumHeight(40)
+        self.btn_subquery_filter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_subquery_filter.setEnabled(False)
         self.btn_subquery_filter.setStyleSheet(advanced_style_3)
         self.btn_subquery_filter.clicked.connect(self.show_subquery_filter_dialog)
@@ -207,6 +226,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_custom_types = QPushButton("Типы")
         self.btn_custom_types.setMinimumHeight(40)
+        self.btn_custom_types.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_custom_types.setEnabled(False)
         self.btn_custom_types.setStyleSheet(advanced_style_3)
         self.btn_custom_types.clicked.connect(self.show_custom_types_dialog)
@@ -214,6 +234,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_similar_to = QPushButton("SIMILAR TO")
         self.btn_similar_to.setMinimumHeight(40)
+        self.btn_similar_to.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_similar_to.setEnabled(False)
         self.btn_similar_to.setStyleSheet(advanced_style_3)
         self.btn_similar_to.clicked.connect(self.show_similar_to_dialog)
@@ -221,6 +242,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_aggregation = QPushButton("GROUP BY")
         self.btn_aggregation.setMinimumHeight(40)
+        self.btn_aggregation.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_aggregation.setEnabled(False)
         self.btn_aggregation.setStyleSheet(advanced_style_3)
         self.btn_aggregation.clicked.connect(self.show_aggregation_dialog)
@@ -228,6 +250,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_case_constructor = QPushButton("CASE")
         self.btn_case_constructor.setMinimumHeight(40)
+        self.btn_case_constructor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_case_constructor.setEnabled(False)
         self.btn_case_constructor.setStyleSheet(advanced_style_3)
         self.btn_case_constructor.clicked.connect(self.show_case_constructor_dialog)
@@ -235,6 +258,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_null_functions = QPushButton("NULL функции")
         self.btn_null_functions.setMinimumHeight(40)
+        self.btn_null_functions.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_null_functions.setEnabled(False)
         self.btn_null_functions.setStyleSheet(advanced_style_3)
         self.btn_null_functions.clicked.connect(self.show_null_functions_dialog)
@@ -267,6 +291,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_advanced_grouping = QPushButton("Группировка")
         self.btn_advanced_grouping.setMinimumHeight(40)
+        self.btn_advanced_grouping.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_advanced_grouping.setEnabled(False)
         self.btn_advanced_grouping.setStyleSheet(advanced_style_4)
         self.btn_advanced_grouping.clicked.connect(self.show_advanced_grouping_dialog)
@@ -274,6 +299,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_view_management = QPushButton("VIEW")
         self.btn_view_management.setMinimumHeight(40)
+        self.btn_view_management.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_view_management.setEnabled(False)
         self.btn_view_management.setStyleSheet(advanced_style_4)
         self.btn_view_management.clicked.connect(self.show_view_management_dialog)
@@ -281,6 +307,7 @@ class BankSystemApp(QMainWindow):
         
         self.btn_materialized_view = QPushButton("MATERIALIZED VIEW")
         self.btn_materialized_view.setMinimumHeight(40)
+        self.btn_materialized_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_materialized_view.setEnabled(False)
         self.btn_materialized_view.setStyleSheet(advanced_style_4)
         self.btn_materialized_view.clicked.connect(self.show_materialized_view_dialog)
@@ -288,6 +315,7 @@ class BankSystemApp(QMainWindow):
         
         self.btn_cte_constructor = QPushButton("CTE Constructor")
         self.btn_cte_constructor.setMinimumHeight(40)
+        self.btn_cte_constructor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_cte_constructor.setEnabled(False)
         self.btn_cte_constructor.setStyleSheet(advanced_style_4)
         self.btn_cte_constructor.clicked.connect(self.show_cte_constructor_dialog)
@@ -298,6 +326,7 @@ class BankSystemApp(QMainWindow):
 
         self.btn_reconnect = QPushButton("Переподключиться к БД")
         self.btn_reconnect.setMinimumHeight(40)
+        self.btn_reconnect.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_reconnect.setStyleSheet("""
             QPushButton {
                 background-color: #27AE60;
@@ -314,13 +343,19 @@ class BankSystemApp(QMainWindow):
         self.btn_reconnect.clicked.connect(self.show_connection_dialog)
         buttons_layout.addWidget(self.btn_reconnect)
 
+        # Put the container into the scroll area so it can be scrolled on smaller
+        # displays, and add the layout to the container
         main_layout.addLayout(buttons_layout)
+        scroll_area.setWidget(container)
 
         log_group = QGroupBox("Последние действия")
         log_layout = QVBoxLayout()
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(200)
+        # Allow the log area to resize with the window instead of forcing a
+        # small limit which can push other widgets out of view or cause
+        # clipping when the window is resized on different screens.
+        self.log_text.setMinimumHeight(150)
         self.log_text.setStyleSheet("""
             QTextEdit {
                 background-color: #F8F9FA;

@@ -110,7 +110,8 @@ class AddDataDialog(QDialog):
 
         self.setWindowTitle("Добавить данные")
         self.setModal(True)
-        self.resize(700, 750)
+        self.resize(900, 650)
+        self.setMinimumSize(700, 500)
 
         self.setup_ui()
 
@@ -576,7 +577,8 @@ class ViewDataDialog(QDialog):
 
         self.setWindowTitle("Просмотр данных")
         self.setModal(True)
-        self.resize(1300, 750)
+        self.resize(1200, 650)
+        self.setMinimumSize(1000, 600)
 
         self.setup_ui()
 
@@ -924,7 +926,8 @@ class AlterTableDialog(QDialog):
         
         self.setWindowTitle("ALTER TABLE - Изменение структуры таблиц")
         self.setModal(True)
-        self.resize(900, 700)
+        self.resize(1000, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -1373,7 +1376,8 @@ class AdvancedSelectDialog(QDialog):
         
         self.setWindowTitle("Расширенный SELECT")
         self.setModal(True)
-        self.resize(1200, 800)
+        self.resize(1100, 700)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -1500,7 +1504,8 @@ class TextSearchDialog(QDialog):
         
         self.setWindowTitle("Поиск по тексту")
         self.setModal(True)
-        self.resize(1000, 700)
+        self.resize(1000, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -1632,7 +1637,8 @@ class StringFunctionsDialog(QDialog):
         
         self.setWindowTitle("Функции работы со строками")
         self.setModal(True)
-        self.resize(1000, 700)
+        self.resize(1000, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -1801,7 +1807,8 @@ class JoinWizardDialog(QDialog):
         
         self.setWindowTitle("Мастер соединений (JOIN)")
         self.setModal(True)
-        self.resize(1200, 800)
+        self.resize(1100, 700)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -1960,7 +1967,8 @@ class SubqueryFilterDialog(QDialog):
         
         self.setWindowTitle("Фильтры подзапросами")
         self.setModal(True)
-        self.resize(1200, 700)
+        self.resize(1100, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -2098,6 +2106,7 @@ class CustomTypesDialog(QDialog):
         self.setWindowTitle("Пользовательские типы данных")
         self.setModal(True)
         self.resize(1000, 600)
+        self.setMinimumSize(900, 500)
         
         self.setup_ui()
     
@@ -2279,7 +2288,8 @@ class SimilarToDialog(QDialog):
         
         self.setWindowTitle("Поиск SIMILAR TO")
         self.setModal(True)
-        self.resize(1200, 700)
+        self.resize(1100, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -2407,7 +2417,8 @@ class AggregationDialog(QDialog):
         
         self.setWindowTitle("Агрегирование и группировка")
         self.setModal(True)
-        self.resize(1200, 700)
+        self.resize(1100, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -2549,7 +2560,8 @@ class CaseConstructorDialog(QDialog):
         
         self.setWindowTitle("Конструктор CASE выражений")
         self.setModal(True)
-        self.resize(1200, 700)
+        self.resize(1100, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -2710,7 +2722,8 @@ class NullFunctionsDialog(QDialog):
         
         self.setWindowTitle("COALESCE и NULLIF функции")
         self.setModal(True)
-        self.resize(1200, 700)
+        self.resize(1100, 650)
+        self.setMinimumSize(900, 600)
         
         self.setup_ui()
     
@@ -2855,7 +2868,8 @@ class AdvancedGroupingDialog(QDialog):
         
         self.setWindowTitle("Расширенная группировка данных")
         self.setModal(True)
-        self.resize(1400, 800)
+        self.resize(1200, 700)
+        self.setMinimumSize(1000, 600)
         
         # Словарь таблиц и их колонок для группировки
         self.table_columns = {
@@ -3050,7 +3064,8 @@ class ViewManagementDialog(QDialog):
         
         self.setWindowTitle("Управление представлениями (VIEW)")
         self.setModal(True)
-        self.resize(1400, 800)
+        self.resize(1200, 700)
+        self.setMinimumSize(1000, 600)
         
         self.setup_ui()
         self.refresh_views()

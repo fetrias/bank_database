@@ -2,7 +2,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QGridLayout, QTextEdit,
                                QComboBox, QMessageBox, QTabWidget, QWidget,
                                QTableWidget, QTableWidgetItem, QHeaderView,
-                               QGroupBox, QScrollArea, QCheckBox, QFormLayout, QApplication)
+                               QGroupBox, QScrollArea, QCheckBox, QFormLayout, QApplication,
+                               QListWidget)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QClipboard
 from typing import Callable
@@ -1395,29 +1396,56 @@ class AdvancedSelectDialog(QDialog):
         controls_layout.addWidget(self.table_combo, 0, 1, 1, 3)
         
         controls_layout.addWidget(QLabel("SELECT столбцы:"), 1, 0)
-        self.columns_edit = QLineEdit()
-        self.columns_edit.setPlaceholderText("*, col1, col2, COUNT(*), SUM(amount)")
-        controls_layout.addWidget(self.columns_edit, 1, 1, 1, 3)
+        self.columns_list = QListWidget()
+        self.columns_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        controls_layout.addWidget(self.columns_list, 1, 1, 1, 3)
+        self.select_all_columns_chk = QCheckBox("Выбрать все")
+        self.select_all_columns_chk.stateChanged.connect(self.on_select_all_columns)
+        controls_layout.addWidget(self.select_all_columns_chk, 1, 4)
         
         controls_layout.addWidget(QLabel("WHERE условие:"), 2, 0)
-        self.where_edit = QLineEdit()
-        self.where_edit.setPlaceholderText("amount > 100 AND status = 'ACTIVE'")
-        controls_layout.addWidget(self.where_edit, 2, 1, 1, 3)
+        # Filter area: column, operator, value and add button
+        self.where_col_combo = QComboBox()
+        controls_layout.addWidget(self.where_col_combo, 2, 1)
+        self.where_op_combo = QComboBox()
+        self.where_op_combo.addItems(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE'])
+        controls_layout.addWidget(self.where_op_combo, 2, 2)
+        self.where_value_edit = QLineEdit()
+        self.where_value_edit.setPlaceholderText("Значение фильтра")
+        controls_layout.addWidget(self.where_value_edit, 2, 3)
+        add_filter_btn = QPushButton("Добавить фильтр")
+        add_filter_btn.clicked.connect(self.add_where_filter)
+        controls_layout.addWidget(add_filter_btn, 2, 4)
+        # List of filters
+        self.where_list = QListWidget()
+        controls_layout.addWidget(self.where_list, 3, 1, 1, 4)
         
-        controls_layout.addWidget(QLabel("ORDER BY:"), 3, 0)
-        self.order_edit = QLineEdit()
-        self.order_edit.setPlaceholderText("column_name ASC, column2 DESC")
-        controls_layout.addWidget(self.order_edit, 3, 1, 1, 3)
+        controls_layout.addWidget(QLabel("ORDER BY:"), 4, 0)
+        self.order_col_combo = QComboBox()
+        controls_layout.addWidget(self.order_col_combo, 4, 1)
+        self.order_dir_combo = QComboBox()
+        self.order_dir_combo.addItems(['ASC', 'DESC'])
+        controls_layout.addWidget(self.order_dir_combo, 4, 2)
+        clear_order_btn = QPushButton("Очистить сортировку")
+        clear_order_btn.clicked.connect(lambda: self.order_col_combo.setCurrentIndex(0))
+        controls_layout.addWidget(clear_order_btn, 4, 3)
         
-        controls_layout.addWidget(QLabel("GROUP BY:"), 4, 0)
-        self.group_edit = QLineEdit()
-        self.group_edit.setPlaceholderText("column_name")
-        controls_layout.addWidget(self.group_edit, 4, 1, 1, 3)
+        controls_layout.addWidget(QLabel("GROUP BY:"), 5, 0)
+        self.group_list = QListWidget()
+        self.group_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        controls_layout.addWidget(self.group_list, 5, 1, 1, 3)
         
-        controls_layout.addWidget(QLabel("HAVING:"), 5, 0)
-        self.having_edit = QLineEdit()
-        self.having_edit.setPlaceholderText("COUNT(*) > 5")
-        controls_layout.addWidget(self.having_edit, 5, 1, 1, 3)
+        controls_layout.addWidget(QLabel("HAVING:"), 6, 0)
+        self.having_func_combo = QComboBox()
+        self.having_func_combo.addItems(['', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX'])
+        controls_layout.addWidget(self.having_func_combo, 6, 1)
+        self.having_col_combo = QComboBox()
+        controls_layout.addWidget(self.having_col_combo, 6, 2)
+        self.having_op_combo = QComboBox()
+        self.having_op_combo.addItems(['', '>', '<', '>=', '<=', '=', '!='])
+        controls_layout.addWidget(self.having_op_combo, 6, 3)
+        self.having_value_edit = QLineEdit()
+        controls_layout.addWidget(self.having_value_edit, 6, 4)
         
         controls_group.setLayout(controls_layout)
         layout.addWidget(controls_group)
@@ -1446,50 +1474,118 @@ class AdvancedSelectDialog(QDialog):
             return self.db_manager.get_tables_list()
         except:
             return []
-    
+
+    def on_select_all_columns(self, state):
+        if state:
+            for i in range(self.columns_list.count()):
+                item = self.columns_list.item(i)
+                item.setSelected(True)
+        else:
+            for i in range(self.columns_list.count()):
+                item = self.columns_list.item(i)
+                item.setSelected(False)
+
     def update_columns(self):
-        pass
+        table = self.table_combo.currentText()
+        # clear
+        self.columns_list.clear()
+        self.where_col_combo.clear()
+        self.order_col_combo.clear()
+        self.group_list.clear()
+        self.having_col_combo.clear()
+
+        if table:
+            try:
+                columns = self.db_manager.get_table_columns(table)
+                col_names = [col['name'] for col in columns]
+                # populate columns list and other combos
+                for name in col_names:
+                    self.columns_list.addItem(name)
+                    self.group_list.addItem(name)
+                self.where_col_combo.addItems(col_names)
+                self.order_col_combo.addItems([''] + col_names)
+                self.having_col_combo.addItems([''] + col_names)
+            except Exception:
+                pass
     
     def execute_query(self):
         try:
             table = self.table_combo.currentText()
-            columns_str = self.columns_edit.text().strip()
-            where = self.where_edit.text().strip()
-            order = self.order_edit.text().strip()
-            group = self.group_edit.text().strip()
-            having = self.having_edit.text().strip()
-            
-            columns = [c.strip() for c in columns_str.split(',')] if columns_str and columns_str != '*' else None
-            
-            sql = f"SELECT {columns_str if columns_str else '*'} FROM bank_system.{table}"
-            if where:
-                sql += f" WHERE {where}"
-            if group:
-                sql += f" GROUP BY {group}"
+            # columns
+            selected_cols = [item.text() for item in self.columns_list.selectedItems()]
+            columns = selected_cols if selected_cols else None
+
+            # where filters (AND)
+            where_clauses = []
+            for i in range(self.where_list.count()):
+                where_clauses.append(self.where_list.item(i).text())
+            where_clause = ' AND '.join(where_clauses)
+
+            # group by
+            group_cols = [item.text() for item in self.group_list.selectedItems()]
+            group_by = ', '.join(group_cols) if group_cols else ''
+
+            # having
+            having = ''
+            func = self.having_func_combo.currentText()
+            hcol = self.having_col_combo.currentText()
+            hop = self.having_op_combo.currentText()
+            hval = self.having_value_edit.text().strip()
+            if func and hcol and hop and hval:
+                having = f"{func}({hcol}) {hop} {hval}"
+
+            # order by
+            order_col = self.order_col_combo.currentText()
+            order_dir = self.order_dir_combo.currentText()
+            order_by = f"{order_col} {order_dir}" if order_col else ''
+
+            sql = f"SELECT {', '.join(columns) if columns else '*'} FROM bank_system.{table}"
+            if where_clause:
+                sql += f" WHERE {where_clause}"
+            if group_by:
+                sql += f" GROUP BY {group_by}"
             if having:
                 sql += f" HAVING {having}"
-            if order:
-                sql += f" ORDER BY {order}"
-            
+            if order_by:
+                sql += f" ORDER BY {order_by}"
+
             results, column_names = self.db_manager.execute_advanced_select(
-                table, columns, where, order, group, having
+                table, columns, where_clause, order_by, group_by, having
             )
-            
+
             self.sql_label.setText(f"SQL: {sql}")
-            
+
             self.result_table.setRowCount(len(results))
             self.result_table.setColumnCount(len(column_names))
             self.result_table.setHorizontalHeaderLabels(column_names)
-            
+
             for row_idx, row_data in enumerate(results):
                 for col_idx, value in enumerate(row_data):
                     self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
-            
+
             QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
             
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось выполнить запрос:\n{str(e)}")
             self.logger.error(f"Query error: {e}")
+
+    def add_where_filter(self):
+        col = self.where_col_combo.currentText()
+        op = self.where_op_combo.currentText()
+        val = self.where_value_edit.text().strip()
+        if not col or not op or val == '':
+            QMessageBox.warning(self, "Ошибка", "Заполните колонки фильтра")
+            return
+        # Quote value if it looks like text
+        try:
+            float(val)
+            val_formatted = val
+        except:
+            val_formatted = f"'{val}'"
+
+        clause = f"{col} {op} {val_formatted}"
+        self.where_list.addItem(clause)
+        self.where_value_edit.clear()
 
 
 class TextSearchDialog(QDialog):
@@ -1846,13 +1942,18 @@ class JoinWizardDialog(QDialog):
         ])
         controls_layout.addWidget(self.join_type_combo, 4, 1)
         
-        controls_layout.addWidget(QLabel("Столбцы для вывода:"), 5, 0)
-        self.columns_edit = QLineEdit()
-        self.columns_edit.setPlaceholderText("* (все) или t1.col1, t2.col2, ...")
-        controls_layout.addWidget(self.columns_edit, 5, 1)
-        
         controls_group.setLayout(controls_layout)
         layout.addWidget(controls_group)
+        
+        # Выбор столбцов из таблиц
+        columns_group = QGroupBox("Столбцы для вывода")
+        columns_layout = QHBoxLayout()
+        
+        self.columns_list = QListWidget()
+        self.columns_list.setSelectionMode(QAbstractItemModel.SelectionMode.MultiSelection)
+        columns_layout.addWidget(self.columns_list)
+        columns_group.setLayout(columns_layout)
+        layout.addWidget(columns_group)
         
         info_label = QLabel(
             "INNER: только совпадающие записи | LEFT: все из 1-й + совпадения из 2-й\n"
@@ -1898,6 +1999,7 @@ class JoinWizardDialog(QDialog):
                 self.column1_combo.addItems([col['name'] for col in columns])
             except:
                 pass
+        self.update_join_columns()
     
     def update_columns2(self):
         table = self.table2_combo.currentText()
@@ -1908,6 +2010,27 @@ class JoinWizardDialog(QDialog):
                 self.column2_combo.addItems([col['name'] for col in columns])
             except:
                 pass
+        self.update_join_columns()
+    
+    def update_join_columns(self):
+        """Обновить список доступных столбцов из обеих таблиц"""
+        self.columns_list.clear()
+        table1 = self.table1_combo.currentText()
+        table2 = self.table2_combo.currentText()
+        
+        if not table1 or not table2:
+            return
+        
+        try:
+            cols1 = self.db_manager.get_table_columns(table1)
+            cols2 = self.db_manager.get_table_columns(table2)
+            
+            for col in cols1:
+                self.columns_list.addItem(f"t1.{col['name']}")
+            for col in cols2:
+                self.columns_list.addItem(f"t2.{col['name']}")
+        except:
+            pass
     
     def execute_join(self):
         try:
@@ -1916,7 +2039,13 @@ class JoinWizardDialog(QDialog):
             column1 = self.column1_combo.currentText()
             column2 = self.column2_combo.currentText()
             join_type_text = self.join_type_combo.currentText()
-            columns_str = self.columns_edit.text().strip()
+            
+            # Получить выбранные столбцы из списка
+            selected_items = self.columns_list.selectedItems()
+            if selected_items:
+                columns_str = ', '.join([item.text() for item in selected_items])
+            else:
+                columns_str = '*'
             
             join_map = {
                 'INNER (внутреннее)': 'INNER',
@@ -1926,12 +2055,13 @@ class JoinWizardDialog(QDialog):
             }
             join_type = join_map[join_type_text]
             
-            columns = None
-            if columns_str and columns_str != '*':
-                columns = [c.strip() for c in columns_str.split(',')]
-            
-            sql = f"SELECT {columns_str if columns_str else '*'} FROM bank_system.{table1} t1 {join_type} JOIN bank_system.{table2} t2 ON t1.{column1} = t2.{column2}"
+            sql = f"SELECT {columns_str} FROM bank_system.{table1} t1 {join_type} JOIN bank_system.{table2} t2 ON t1.{column1} = t2.{column2}"
             self.sql_label.setText(f"SQL: {sql}")
+            
+            # Для db_manager, если нужны конкретные столбцы, преобразуем в список
+            columns = None
+            if columns_str != '*':
+                columns = [c.strip() for c in columns_str.split(',')]
             
             results, column_names = self.db_manager.execute_join(
                 table1, table2, column1, column2, join_type, columns
@@ -2455,9 +2585,17 @@ class AggregationDialog(QDialog):
         filter_layout.addWidget(self.group_combo, 1, 3)
         
         filter_layout.addWidget(QLabel("HAVING условие:"), 2, 0)
-        self.having_edit = QLineEdit()
-        self.having_edit.setPlaceholderText("Например: COUNT(*) > 5")
-        filter_layout.addWidget(self.having_edit, 2, 1, 1, 3)
+        self.having_func_combo = QComboBox()
+        self.having_func_combo.addItems(['', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX'])
+        filter_layout.addWidget(self.having_func_combo, 2, 1)
+        self.having_col_combo = QComboBox()
+        filter_layout.addWidget(self.having_col_combo, 2, 2)
+        self.having_op_combo = QComboBox()
+        self.having_op_combo.addItems(['', '>', '<', '>=', '<=', '=', '!='])
+        filter_layout.addWidget(self.having_op_combo, 2, 3)
+        self.having_value_edit = QLineEdit()
+        self.having_value_edit.setPlaceholderText("Значение")
+        filter_layout.addWidget(self.having_value_edit, 2, 4)
         
         apply_btn = QPushButton("Выполнить")
         apply_btn.clicked.connect(self.apply_aggregation)
@@ -2495,6 +2633,9 @@ class AggregationDialog(QDialog):
             col_names = [col['name'] for col in columns]
             self.agg_column_combo.addItems(col_names)
             self.group_combo.addItems(col_names)
+            # populate having column combo as well
+            self.having_col_combo.clear()
+            self.having_col_combo.addItems([''] + col_names)
         except Exception as e:
             self.logger.error(f"Error loading columns: {e}")
     
@@ -2504,12 +2645,23 @@ class AggregationDialog(QDialog):
             agg_func = self.agg_func_combo.currentText()
             agg_column = self.agg_column_combo.currentText()
             group_by = self.group_combo.currentText()
-            having = self.having_edit.text().strip()
-            
+            func = self.having_func_combo.currentText()
+            hcol = self.having_col_combo.currentText()
+            hop = self.having_op_combo.currentText()
+            hval = self.having_value_edit.text().strip()
+
             if group_by == "(нет)":
                 group_by = None
-            if not having:
-                having = None
+
+            having = None
+            if func and hcol and hop and hval:
+                # quote non-numeric value
+                try:
+                    float(hval)
+                    val_formatted = hval
+                except:
+                    val_formatted = f"'{hval}'"
+                having = f"{func}({hcol}) {hop} {val_formatted}"
             
             results, column_names = self.db_manager.execute_aggregation(
                 table, agg_func, agg_column, group_by, having
@@ -2588,27 +2740,37 @@ class CaseConstructorDialog(QDialog):
         self.select_edit.setPlaceholderText("*, col1, col2")
         filter_layout.addWidget(self.select_edit, 0, 3)
         
-        filter_layout.addWidget(QLabel("WHEN условие:"), 1, 0)
-        self.when_edit = QLineEdit()
-        self.when_edit.setPlaceholderText("balance > 1000")
-        self.when_edit.setText("amount > 100")
-        filter_layout.addWidget(self.when_edit, 1, 1)
-        
-        filter_layout.addWidget(QLabel("THEN результат:"), 1, 2)
+        filter_layout.addWidget(QLabel("WHEN - столбец:"), 1, 0)
+        self.when_col_combo = QComboBox()
+        filter_layout.addWidget(self.when_col_combo, 1, 1)
+
+        filter_layout.addWidget(QLabel("Оператор:"), 1, 2)
+        self.when_op_combo = QComboBox()
+        self.when_op_combo.addItems(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE'])
+        filter_layout.addWidget(self.when_op_combo, 1, 3)
+
+        filter_layout.addWidget(QLabel("Значение:"), 2, 0)
+        self.when_value_edit = QLineEdit()
+        filter_layout.addWidget(self.when_value_edit, 2, 1)
+
+        filter_layout.addWidget(QLabel("THEN результат:"), 2, 2)
         self.then_edit = QLineEdit()
-        self.then_edit.setPlaceholderText("'Высокий баланс'")
-        self.then_edit.setText("'Большая сумма'")
-        filter_layout.addWidget(self.then_edit, 1, 3)
+        self.then_edit.setPlaceholderText("'Результат' или 123")
+        filter_layout.addWidget(self.then_edit, 2, 3)
         
         add_btn = QPushButton("Добавить WHEN/THEN")
         add_btn.clicked.connect(self.add_when_then)
-        filter_layout.addWidget(add_btn, 2, 0)
+        filter_layout.addWidget(add_btn, 3, 0)
         
-        filter_layout.addWidget(QLabel("ELSE результат:"), 2, 1, 1, 2)
+        filter_layout.addWidget(QLabel("ELSE результат:"), 4, 0)
         self.else_edit = QLineEdit()
         self.else_edit.setText("'Низкий'")
         self.else_edit.setPlaceholderText("'Низкий баланс'")
-        filter_layout.addWidget(self.else_edit, 2, 3)
+        filter_layout.addWidget(self.else_edit, 4, 1)
+
+        # List of added WHEN/THENs
+        self.when_list = QListWidget()
+        filter_layout.addWidget(self.when_list, 5, 0, 1, 4)
         
         layout.addLayout(filter_layout)
         
@@ -2642,19 +2804,37 @@ class CaseConstructorDialog(QDialog):
         self.table_combo.setCurrentText('transactions')
     
     def on_table_changed(self):
-        pass
+        table = self.table_combo.currentText()
+        try:
+            cols = self.db_manager.get_table_columns(table)
+            col_names = [c['name'] for c in cols]
+            self.when_col_combo.clear()
+            self.when_col_combo.addItems(col_names)
+        except Exception as e:
+            self.logger.error(f"Error loading columns for CASE: {e}")
     
     def add_when_then(self):
-        when = self.when_edit.text().strip()
+        col = self.when_col_combo.currentText()
+        op = self.when_op_combo.currentText()
+        val = self.when_value_edit.text().strip()
         then = self.then_edit.text().strip()
-        
-        if not when or not then:
-            QMessageBox.warning(self, "Ошибка", "Заполните оба поля WHEN и THEN")
+
+        if not col or not op or val == '' or not then:
+            QMessageBox.warning(self, "Ошибка", "Заполните все поля WHEN и THEN")
             return
-        
-        self.when_then_pairs.append((when, then))
+
+        # format value
+        try:
+            float(val)
+            val_fmt = val
+        except:
+            val_fmt = f"'{val}'"
+
+        when_expr = f"{col} {op} {val_fmt}"
+        self.when_then_pairs.append((when_expr, then))
+        self.when_list.addItem(f"WHEN {when_expr} THEN {then}")
         self.update_conditions_label()
-        self.when_edit.clear()
+        self.when_value_edit.clear()
         self.then_edit.clear()
     
     def update_conditions_label(self):
@@ -2761,9 +2941,9 @@ class NullFunctionsDialog(QDialog):
         filter_layout.addWidget(self.param_edit, 1, 3)
         
         filter_layout.addWidget(QLabel("SELECT столбцы:"), 2, 0)
-        self.select_edit = QLineEdit()
-        self.select_edit.setText("*")
-        filter_layout.addWidget(self.select_edit, 2, 1, 1, 3)
+        self.select_columns_list = QListWidget()
+        self.select_columns_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        filter_layout.addWidget(self.select_columns_list, 2, 1, 1, 3)
         
         execute_btn = QPushButton("Выполнить")
         execute_btn.clicked.connect(self.execute_function)
@@ -2798,6 +2978,10 @@ class NullFunctionsDialog(QDialog):
         try:
             columns = self.db_manager.get_table_columns(table)
             self.column_combo.addItems([col['name'] for col in columns])
+            # populate select columns list for NULL functions dialog
+            self.select_columns_list.clear()
+            for col in columns:
+                self.select_columns_list.addItem(col['name'])
         except Exception as e:
             self.logger.error(f"Error loading columns: {e}")
     
@@ -2816,7 +3000,8 @@ class NullFunctionsDialog(QDialog):
             func_type = self.func_combo.currentText()
             column = self.column_combo.currentText()
             param = self.param_edit.text().strip()
-            select_cols = self.select_edit.text().strip()
+            select_cols_items = [it.text() for it in self.select_columns_list.selectedItems()]
+            select_cols = ', '.join(select_cols_items) if select_cols_items else '*'
             
             if func_type == "COALESCE":
                 results, column_names = self.db_manager.execute_coalesce_nullif(
@@ -2899,9 +3084,10 @@ class AdvancedGroupingDialog(QDialog):
         top_layout.addWidget(self.table_combo, 0, 1)
         
         top_layout.addWidget(QLabel("SELECT:"), 0, 2)
-        self.select_edit = QLineEdit()
-        self.select_edit.setText("*")
-        top_layout.addWidget(self.select_edit, 0, 3)
+        # selectable columns for SELECT
+        self.select_columns_box = QListWidget()
+        self.select_columns_box.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        top_layout.addWidget(self.select_columns_box, 0, 3)
         
         top_layout.addWidget(QLabel("Тип группировки:"), 1, 0)
         self.group_type_combo = QComboBox()
@@ -2909,9 +3095,20 @@ class AdvancedGroupingDialog(QDialog):
         top_layout.addWidget(self.group_type_combo, 1, 1)
         
         top_layout.addWidget(QLabel("WHERE условие (опционально):"), 1, 2)
-        self.where_edit = QLineEdit()
-        self.where_edit.setPlaceholderText("is_active = TRUE")
-        top_layout.addWidget(self.where_edit, 1, 3)
+        self.ag_where_col = QComboBox()
+        top_layout.addWidget(self.ag_where_col, 1, 3)
+        self.ag_where_op = QComboBox()
+        self.ag_where_op.addItems(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN'])
+        top_layout.addWidget(self.ag_where_op, 1, 4)
+        self.ag_where_val = QLineEdit()
+        self.ag_where_val.setPlaceholderText("Значение")
+        top_layout.addWidget(self.ag_where_val, 1, 5)
+        ag_add_filter_btn = QPushButton("Добавить фильтр")
+        ag_add_filter_btn.clicked.connect(self.add_advanced_group_filter)
+        top_layout.addWidget(ag_add_filter_btn, 1, 6)
+        self.ag_where_list = QListWidget()
+        self.ag_where_list.setMaximumHeight(60)
+        top_layout.addWidget(self.ag_where_list, 2, 2, 1, 5)
         
         layout.addLayout(top_layout)
         
@@ -2930,9 +3127,14 @@ class AdvancedGroupingDialog(QDialog):
         filter_layout = QGridLayout()
         
         filter_layout.addWidget(QLabel("ORDER BY:"), 0, 0)
-        self.order_edit = QLineEdit()
-        self.order_edit.setPlaceholderText("1, 2")
-        filter_layout.addWidget(self.order_edit, 0, 1, 1, 3)
+        self.ag_order_col = QComboBox()
+        filter_layout.addWidget(self.ag_order_col, 0, 1)
+        self.ag_order_dir = QComboBox()
+        self.ag_order_dir.addItems(['ASC', 'DESC'])
+        filter_layout.addWidget(self.ag_order_dir, 0, 2)
+        ag_clear_order_btn = QPushButton("Очистить")
+        ag_clear_order_btn.clicked.connect(lambda: self.ag_order_col.setCurrentIndex(0))
+        filter_layout.addWidget(ag_clear_order_btn, 0, 3)
         
         execute_btn = QPushButton("Выполнить группировку")
         execute_btn.clicked.connect(self.execute_grouping)
@@ -2988,54 +3190,88 @@ class AdvancedGroupingDialog(QDialog):
             first_cb = self.column_checkboxes.get(cols[0])
             if first_cb:
                 first_cb.setChecked(True)
+        # populate select columns list and where/order combos
+        try:
+            self.select_columns_box.clear()
+            for col in cols:
+                self.select_columns_box.addItem(col)
+            self.ag_where_col.clear()
+            self.ag_where_col.addItems(cols)
+            self.ag_order_col.clear()
+            self.ag_order_col.addItems([''] + cols)
+        except Exception:
+            pass
     
     def on_table_changed(self):
         """При смене таблицы обновляем checkboxes"""
         self.update_column_checkboxes()
+
+    def add_advanced_group_filter(self):
+        col = self.ag_where_col.currentText()
+        op = self.ag_where_op.currentText()
+        val = self.ag_where_val.text().strip()
+        if not col or not op or val == '':
+            QMessageBox.warning(self, "Ошибка", "Заполните фильтр")
+            return
+        try:
+            float(val)
+            vf = val
+        except:
+            vf = f"'{val}'"
+        clause = f"{col} {op} {vf}"
+        self.ag_where_list.addItem(clause)
+        self.ag_where_val.clear()
     
     def execute_grouping(self):
         try:
             table = self.table_combo.currentText()
-            select_cols = self.select_edit.text().strip()
             group_type = self.group_type_combo.currentText()
-            where = self.where_edit.text().strip()
-            order = self.order_edit.text().strip()
-            
-            # Получаем выбранные колонки
+            # collect select columns
+            sel_items = [self.select_columns_box.item(i).text() for i in range(self.select_columns_box.count()) if self.select_columns_box.item(i).isSelected()]
+            select_cols = ', '.join(sel_items) if sel_items else '*'
+            # where clauses
+            where_clauses = [self.ag_where_list.item(i).text() for i in range(self.ag_where_list.count())]
+            where = ' AND '.join(where_clauses) if where_clauses else None
+            # order
+            order_col = self.ag_order_col.currentText()
+            order_dir = self.ag_order_dir.currentText()
+            order = f"{order_col} {order_dir}" if order_col else None
+
+            # Получаем выбранные колонки для GROUP BY
             selected_cols = [col for col, cb in self.column_checkboxes.items() if cb.isChecked()]
-            
+
             if not selected_cols:
                 QMessageBox.warning(self, "Ошибка", "Выберите хотя бы одну колонку для GROUP BY")
                 return
-            
+
             group_cols_str = ", ".join(selected_cols)
-            
+
             # При SELECT * с ROLLUP/CUBE/GROUPING_SETS нужно выбирать только GROUP BY колонки
             # или использовать агрегатные функции
             if select_cols == '*':
                 select_cols = group_cols_str + ", COUNT(*) as count"
-            
+
             results, column_names = self.db_manager.execute_advanced_grouping(
-                table, select_cols, group_type, selected_cols, where or None, order=order or None
+                table, select_cols, group_type, selected_cols, where, None, order
             )
-            
+
             sql = f"SELECT {select_cols} FROM bank_system.{table}"
             if where:
                 sql += f" WHERE {where}"
             sql += f" GROUP BY {group_type}({group_cols_str})"
             if order:
                 sql += f" ORDER BY {order}"
-            
+
             self.sql_label.setText(f"SQL: {sql}")
-            
+
             self.result_table.setRowCount(len(results))
             self.result_table.setColumnCount(len(column_names))
             self.result_table.setHorizontalHeaderLabels(column_names)
-            
+
             for row_idx, row_data in enumerate(results):
                 for col_idx, value in enumerate(row_data):
                     self.result_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
-            
+
             QMessageBox.information(self, "Успех", f"Найдено записей: {len(results)}")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка группировки:\n{str(e)}")
@@ -3126,14 +3362,44 @@ class ViewManagementDialog(QDialog):
         name_layout.addWidget(self.view_name_edit)
         create_layout.addLayout(name_layout)
         
-        create_layout.addWidget(QLabel("SQL запрос:"))
-        self.sql_edit = QTextEdit()
-        self.sql_edit.setPlaceholderText("SELECT * FROM bank_system.currencies WHERE is_active = TRUE")
-        self.sql_edit.setMaximumHeight(150)
-        create_layout.addWidget(self.sql_edit)
+        # GUI builder: choose table, columns and filters instead of free SQL
+        table_sel_layout = QHBoxLayout()
+        table_sel_layout.addWidget(QLabel("Таблица:"))
+        self.view_table_combo = QComboBox()
+        table_sel_layout.addWidget(self.view_table_combo)
+        load_cols_btn = QPushButton("Загрузить колонки")
+        load_cols_btn.clicked.connect(self.load_view_columns)
+        table_sel_layout.addWidget(load_cols_btn)
+        create_layout.addLayout(table_sel_layout)
+
+        create_layout.addWidget(QLabel("Выберите колонки:"))
+        self.view_columns_box = QScrollArea()
+        self.view_columns_box.setWidgetResizable(True)
+        vc_widget = QWidget()
+        self.view_columns_layout = QVBoxLayout(vc_widget)
+        self.view_columns_layout.addStretch()
+        self.view_columns_box.setWidget(vc_widget)
+        self.view_columns_box.setMaximumHeight(120)
+        create_layout.addWidget(self.view_columns_box)
+
+        create_layout.addWidget(QLabel("Фильтры (WHERE):"))
+        v_where_grid = QGridLayout()
+        self.view_where_col = QComboBox()
+        v_where_grid.addWidget(self.view_where_col, 0, 0)
+        self.view_where_op = QComboBox()
+        self.view_where_op.addItems(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN'])
+        v_where_grid.addWidget(self.view_where_op, 0, 1)
+        self.view_where_val = QLineEdit()
+        v_where_grid.addWidget(self.view_where_val, 0, 2)
+        v_add_filter_btn = QPushButton("Добавить фильтр")
+        v_add_filter_btn.clicked.connect(self.add_view_filter)
+        v_where_grid.addWidget(v_add_filter_btn, 0, 3)
+        self.view_where_list = QListWidget()
+        v_where_grid.addWidget(self.view_where_list, 1, 0, 1, 4)
+        create_layout.addLayout(v_where_grid)
         
         create_btn = QPushButton("Создать представление")
-        create_btn.clicked.connect(self.create_view)
+        create_btn.clicked.connect(self.create_view_from_builder)
         create_btn.setStyleSheet("background-color: #28a745;")
         create_layout.addWidget(create_btn)
         
@@ -3167,6 +3433,81 @@ class ViewManagementDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при получении списка представлений:\n{str(e)}")
             self.logger.error(f"Refresh views error: {e}")
+
+    def load_view_columns(self):
+        table = self.view_table_combo.currentText()
+        if not table:
+            return
+        # clear existing
+        while self.view_columns_layout.count() > 1:
+            item = self.view_columns_layout.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+
+        try:
+            cols = self.db_manager.get_table_columns(table)
+            col_names = [c['name'] for c in cols]
+            for col in col_names:
+                cb = QCheckBox(col)
+                cb.setChecked(True)
+                self.view_columns_layout.insertWidget(self.view_columns_layout.count() - 1, cb)
+            # populate where column combo
+            self.view_where_col.clear()
+            self.view_where_col.addItems(col_names)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить колонки:\n{str(e)}")
+            self.logger.error(f"Load view columns error: {e}")
+
+    def add_view_filter(self):
+        col = self.view_where_col.currentText()
+        op = self.view_where_op.currentText()
+        val = self.view_where_val.text().strip()
+        if not col or not op or val == '':
+            QMessageBox.warning(self, "Ошибка", "Заполните фильтр")
+            return
+        try:
+            float(val)
+            vf = val
+        except:
+            vf = f"'{val}'"
+        clause = f"{col} {op} {vf}"
+        self.view_where_list.addItem(clause)
+        self.view_where_val.clear()
+
+    def create_view_from_builder(self):
+        view_name = self.view_name_edit.text().strip()
+        table = self.view_table_combo.currentText()
+        if not view_name:
+            QMessageBox.warning(self, "Ошибка", "Укажите имя представления")
+            return
+        if not table:
+            QMessageBox.warning(self, "Ошибка", "Выберите таблицу")
+            return
+        selected_columns = []
+        for i in range(self.view_columns_layout.count()):
+            item = self.view_columns_layout.itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), QCheckBox):
+                w = item.widget()
+                if w.isChecked():
+                    selected_columns.append(w.text())
+        if not selected_columns:
+            QMessageBox.warning(self, "Ошибка", "Выберите хотя бы одну колонку")
+            return
+        columns_str = ", ".join(f"bank_system.{table}.{c}" for c in selected_columns)
+        where_clauses = [self.view_where_list.item(i).text() for i in range(self.view_where_list.count())]
+        sql_query = f"SELECT {columns_str} FROM bank_system.{table}"
+        if where_clauses:
+            sql_query += " WHERE " + " AND ".join(where_clauses)
+        try:
+            self.db_manager.create_view(view_name, sql_query)
+            QMessageBox.information(self, "Успех", f"Представление '{view_name}' успешно создано")
+            self.view_name_edit.clear()
+            # clear filters
+            self.view_where_list.clear()
+            self.refresh_views()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка создания представления:\n{str(e)}")
+            self.logger.error(f"Create view error: {e}")
     
     def on_view_selected(self, view_name: str):
         """Показать определение выбранного представления"""
@@ -3303,6 +3644,23 @@ class MaterializedViewManagementDialog(QDialog):
         scroll.setWidget(scroll_widget)
         scroll.setMaximumHeight(150)
         layout.addWidget(scroll)
+
+        # WHERE filter builder for materialized view
+        layout.addWidget(QLabel("Фильтры (WHERE, опционально):"))
+        mv_where_grid = QGridLayout()
+        self.mv_where_col = QComboBox()
+        mv_where_grid.addWidget(self.mv_where_col, 0, 0)
+        self.mv_where_op = QComboBox()
+        self.mv_where_op.addItems(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN'])
+        mv_where_grid.addWidget(self.mv_where_op, 0, 1)
+        self.mv_where_val = QLineEdit()
+        mv_where_grid.addWidget(self.mv_where_val, 0, 2)
+        mv_add_filter_btn = QPushButton("Добавить фильтр")
+        mv_add_filter_btn.clicked.connect(self.add_mview_filter)
+        mv_where_grid.addWidget(mv_add_filter_btn, 0, 3)
+        self.mv_where_list = QListWidget()
+        mv_where_grid.addWidget(self.mv_where_list, 1, 0, 1, 4)
+        layout.addLayout(mv_where_grid)
         
         # Кнопка создания
         create_btn = QPushButton("Создать представление")
@@ -3349,15 +3707,15 @@ class MaterializedViewManagementDialog(QDialog):
         """Создать новое материализованное представление"""
         view_name = self.mview_name_edit.text().strip()
         table_name = self.table_combo.currentText()
-        
+
         if not view_name:
             QMessageBox.warning(self, "Ошибка", "Укажите имя представления")
             return
-        
+
         if not table_name:
             QMessageBox.warning(self, "Ошибка", "Выберите таблицу")
             return
-        
+
         # Собрать выбранные колонки
         selected_columns = []
         for i in range(self.mview_columns.count()):
@@ -3366,19 +3724,24 @@ class MaterializedViewManagementDialog(QDialog):
                 widget = item.widget()
                 if isinstance(widget, QCheckBox) and widget.isChecked():
                     selected_columns.append(widget.text())
-        
+
         if not selected_columns:
             QMessageBox.warning(self, "Ошибка", "Выберите хотя бы одну колонку")
             return
-        
+
         # Собрать SQL запрос
         columns_str = ", ".join(f"bank_system.{table_name}.{col}" for col in selected_columns)
         sql_query = f"SELECT {columns_str} FROM bank_system.{table_name}"
-        
+        # add where filters if any
+        where_clauses = [self.mv_where_list.item(i).text() for i in range(self.mv_where_list.count())]
+        if where_clauses:
+            sql_query += " WHERE " + " AND ".join(where_clauses)
+
         try:
             self.db_manager.create_materialized_view(view_name, sql_query)
             QMessageBox.information(self, "Успех", f"Материализованное представление '{view_name}' успешно создано")
             self.mview_name_edit.clear()
+            self.mv_where_list.clear()
             self.refresh_views()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка создания представления:\n{str(e)}")
@@ -3416,6 +3779,22 @@ class MaterializedViewManagementDialog(QDialog):
                 self.refresh_views()
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", f"Ошибка удаления представления:\n{str(e)}")
+
+    def add_mview_filter(self):
+        col = self.mv_where_col.currentText()
+        op = self.mv_where_op.currentText()
+        val = self.mv_where_val.text().strip()
+        if not col or not op or val == '':
+            QMessageBox.warning(self, "Ошибка", "Заполните фильтр")
+            return
+        try:
+            float(val)
+            vf = val
+        except:
+            vf = f"'{val}'"
+        clause = f"{col} {op} {vf}"
+        self.mv_where_list.addItem(clause)
+        self.mv_where_val.clear()
     
     def load_mview_tables(self):
         """Загрузить список таблиц"""
@@ -3434,13 +3813,13 @@ class MaterializedViewManagementDialog(QDialog):
         """Обновить список колонок для выбранной таблицы"""
         if not table_name:
             return
-        
+
         # Очистить предыдущие чекбоксы
         while self.mview_columns.count() > 0:
             item = self.mview_columns.takeAt(0)
             if item and item.widget():
                 item.widget().deleteLater()
-        
+
         try:
             columns_info = self.db_manager.get_table_columns(table_name)
             for col_info in columns_info:
@@ -3448,6 +3827,9 @@ class MaterializedViewManagementDialog(QDialog):
                 checkbox = QCheckBox(col_name)
                 checkbox.setChecked(True)
                 self.mview_columns.insertWidget(self.mview_columns.count() - 1, checkbox)
+            # populate where column combo
+            self.mv_where_col.clear()
+            self.mv_where_col.addItems([c['name'] for c in columns_info])
         except Exception as e:
             self.logger.error(f"Update materialized view columns error: {e}")
 
@@ -3495,10 +3877,21 @@ class CTEConstructorDialog(QDialog):
         
         # WHERE условие
         layout.addWidget(QLabel("WHERE условие (опционально):"))
-        self.cte_where_edit = QTextEdit()
-        self.cte_where_edit.setPlaceholderText("Например: amount > 1000")
-        self.cte_where_edit.setMaximumHeight(60)
-        layout.addWidget(self.cte_where_edit)
+        # structured where builder for CTE
+        where_grid = QGridLayout()
+        self.cte_where_col = QComboBox()
+        where_grid.addWidget(self.cte_where_col, 0, 0)
+        self.cte_where_op = QComboBox()
+        self.cte_where_op.addItems(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE'])
+        where_grid.addWidget(self.cte_where_op, 0, 1)
+        self.cte_where_val = QLineEdit()
+        where_grid.addWidget(self.cte_where_val, 0, 2)
+        add_cte_filter_btn = QPushButton("Добавить фильтр")
+        add_cte_filter_btn.clicked.connect(self.add_cte_filter)
+        where_grid.addWidget(add_cte_filter_btn, 0, 3)
+        self.cte_where_list = QListWidget()
+        where_grid.addWidget(self.cte_where_list, 1, 0, 1, 4)
+        layout.addLayout(where_grid)
         
         # Кнопка добавления CTE
         add_cte_btn = QPushButton("Добавить CTE")
@@ -3537,9 +3930,20 @@ class CTEConstructorDialog(QDialog):
         
         # WHERE условие для основного запроса
         layout.addWidget(QLabel("WHERE условие для основного запроса (опционально):"))
-        self.main_where_edit = QTextEdit()
-        self.main_where_edit.setMaximumHeight(60)
-        layout.addWidget(self.main_where_edit)
+        main_where_grid = QGridLayout()
+        self.main_where_col = QComboBox()
+        main_where_grid.addWidget(self.main_where_col, 0, 0)
+        self.main_where_op = QComboBox()
+        self.main_where_op.addItems(['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN'])
+        main_where_grid.addWidget(self.main_where_op, 0, 1)
+        self.main_where_val = QLineEdit()
+        main_where_grid.addWidget(self.main_where_val, 0, 2)
+        add_main_filter_btn = QPushButton("Добавить фильтр")
+        add_main_filter_btn.clicked.connect(self.add_main_filter)
+        main_where_grid.addWidget(add_main_filter_btn, 0, 3)
+        self.main_where_list = QListWidget()
+        main_where_grid.addWidget(self.main_where_list, 1, 0, 1, 4)
+        layout.addLayout(main_where_grid)
         
         # Кнопки действий
         buttons_layout = QHBoxLayout()
@@ -3610,6 +4014,14 @@ class CTEConstructorDialog(QDialog):
                 checkbox = QCheckBox(col_name)
                 checkbox.setChecked(True)
                 self.cte_columns.insertWidget(self.cte_columns.count() - 1, checkbox)
+            # populate cte where column combo
+            self.cte_where_col.clear()
+            self.cte_where_col.addItems([c['name'] for c in columns_info])
+            # populate main where / main columns combos
+            self.main_where_col.clear()
+            self.main_where_col.addItems([c['name'] for c in columns_info])
+            # also update main_columns widgets set
+            self.update_main_columns(table_name)
         except Exception as e:
             self.logger.error(f"Update CTE columns error: {e}")
     
@@ -3706,6 +4118,38 @@ class CTEConstructorDialog(QDialog):
         self.main_select_table_combo.blockSignals(False)
         
         QMessageBox.information(self, "Успех", f"CTE '{cte_name}' добавлена")
+
+    def add_cte_filter(self):
+        col = self.cte_where_col.currentText()
+        op = self.cte_where_op.currentText()
+        val = self.cte_where_val.text().strip()
+        if not col or not op or val == '':
+            QMessageBox.warning(self, "Ошибка", "Заполните фильтр CTE")
+            return
+        try:
+            float(val)
+            vf = val
+        except:
+            vf = f"'{val}'"
+        clause = f"{col} {op} {vf}"
+        self.cte_where_list.addItem(clause)
+        self.cte_where_val.clear()
+
+    def add_main_filter(self):
+        col = self.main_where_col.currentText()
+        op = self.main_where_op.currentText()
+        val = self.main_where_val.text().strip()
+        if not col or not op or val == '':
+            QMessageBox.warning(self, "Ошибка", "Заполните фильтр основного запроса")
+            return
+        try:
+            float(val)
+            vf = val
+        except:
+            vf = f"'{val}'"
+        clause = f"{col} {op} {vf}"
+        self.main_where_list.addItem(clause)
+        self.main_where_val.clear()
     
     def delete_cte(self, cte_name):
         """Удалить CTE"""
